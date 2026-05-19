@@ -1,6 +1,6 @@
 {
-  "name": "修行日省",
-  "short_name": "修行日省",
+  "name": "行深日省",
+  "short_name": "行深日省",
   "description": "每日反思，精進修行 — 佛教修行者的每日自省日記",
   "start_url": "./index.html",
   "display": "standalone",

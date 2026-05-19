@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#4a3728">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☸</text></svg>">
-<title>修行日省</title>
+<title>行深日省</title>
 <style>
 :root {
   --bg1: #f5edd8; --bg2: #efe7d0; --bg3: #e8dfca;
@@ -263,7 +263,7 @@ textarea { resize: vertical; }
 <script type="module">
 // ─── Firebase SDK ───
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js';
-import { getAuth, signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged }
+import { getAuth, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection }
   from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js';
@@ -376,6 +376,9 @@ const PRESET_SOLVE_FWS = [
   { id:"sf_precept", name:"戒定慧三學", icon:"📐", desc:"以戒為基、因定生慧，三學增上",
     prompt:"運用「戒定慧三學」分析：(1)戒學——行為上需要持守或改進什麼？(2)定學——如何透過定課和專注力訓練來安定身心？(3)慧學——從這些經驗中可以體悟什麼道理？" },
 ];
+
+// ─── Version ───
+const APP_VERSION = "v0.0.0.0";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -511,6 +514,8 @@ const S = {
   guideReport: null, guideLoading: false, guideError: null, guideExpanded: {},
   // FwEdit state
   feName: "", feIcon: "📿", feColor: "#C9A96E", feQs: [], feNewQ: "",
+  // SolveFw edit state
+  sfEditId: null, sfeName: "", sfeIcon: "⚡", sfeDesc: "", sfePrompt: "",
 };
 
 function showToast(msg) {
@@ -545,7 +550,7 @@ function render() {
   let html = '';
   // Header
   html += `<header class="header">
-    <span class="logo">☸</span><span class="title">修行日省</span>
+    <span class="logo">☸</span><span class="title">行深日省</span>
     <button class="hbtn" onclick="goFwPick()" title="選題">☰</button>
     <button class="hbtn" onclick="goSettings()" title="設定">⚙</button>
   </header>`;
@@ -560,6 +565,7 @@ function render() {
   else if (S.view === "fw" && S.subView === "edit") html += renderFwEdit(fs);
   else if (S.view === "fw" && S.subView === "pick") html += renderQnPicker(fs);
   else if (S.view === "settings") html += renderSettingsView(fs, ff);
+  else if (S.view === "solveFwEdit") html += renderSolveFwEdit(fs);
 
   html += '</div>';
 
@@ -588,12 +594,13 @@ function render() {
 function renderLogin(app) {
   app.innerHTML = `<div class="login-page">
     <div class="llogo">☸</div>
-    <div class="ltitle">修行日省</div>
+    <div class="ltitle">行深日省</div>
     <div class="lsub">明因果 · 發大願 · 重實踐<br>每日反思，精進修行</div>
     <button class="google-btn" onclick="doLogin()">
       <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
       Google 登入
     </button>
+    <div style="font-size:11px;color:var(--text3);margin-top:16px;opacity:.5">${APP_VERSION}</div>
   </div>`;
 }
 
@@ -999,22 +1006,26 @@ function renderSettingsView(fs, ff) {
 
     <div class="field">
       <label class="field-lbl">✦ AI 解決框架</label>
-      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">選擇 AI 引導分析時使用的對治框架，可複選</p>
+      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">選擇 AI 引導分析時使用的對治框架，可複選。點名稱可編輯。</p>
       <div style="display:flex;flex-direction:column;gap:5px">`;
   S.solveFws.forEach(sf => {
     const active = S.activeSolveFws.includes(sf.id);
-    h += `<button class="setting-opt${active?' active':''}" onclick="toggleSolveFw('${sf.id}')">
-      <div style="display:flex;align-items:center;gap:8px;flex:1">
+    h += `<div class="setting-opt${active?' active':''}" style="flex-direction:column;gap:6px;cursor:default">
+      <div style="display:flex;align-items:center;gap:8px;width:100%">
+        <span class="checkbox-sm" style="${active?'background:var(--gold);border-color:var(--gold)':'cursor:pointer'}" onclick="toggleSolveFw('${sf.id}')">${active?'✓':''}</span>
         <span style="font-size:18px">${sf.icon}</span>
-        <div>
+        <div style="flex:1;cursor:pointer" onclick="goSfEdit('${sf.id}')">
           <div style="font-weight:600;font-size:13px">${sf.name}</div>
           <div style="font-size:11px;color:var(--text3);line-height:1.4;margin-top:2px">${sf.desc}</div>
         </div>
+        <button style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 6px" onclick="goSfEdit('${sf.id}')">✎</button>
+        <button style="background:none;border:none;color:var(--danger);font-size:12px;padding:2px 6px" onclick="confirmDelSf('${sf.id}','${esc(sf.name)}')">✕</button>
       </div>
-      <span class="checkbox-sm" style="${active?'background:var(--gold);border-color:var(--gold)':''}">${active?'✓':''}</span>
-    </button>`;
+    </div>`;
   });
-  h += `</div></div>
+  h += `</div>
+      <button class="add-btn" onclick="goSfNew()">＋ 新增解決框架</button>
+    </div>
 
     <div class="field">
       <label class="field-lbl">關於 AI 功能</label>
@@ -1024,7 +1035,51 @@ function renderSettingsView(fs, ff) {
 • 解決框架：AI 會參考你選定的對治框架來給予建議</p>
       </div>
     </div>
+
+    <div style="text-align:center;padding:12px 0 4px;font-size:11px;color:var(--text3);opacity:.5">
+      行深日省 ${APP_VERSION}
+    </div>
   </div>`;
+  return h;
+}
+
+// ─── Solve Framework Edit ───
+function renderSolveFwEdit(fs) {
+  const SFICONS = ["⚡","🔄","💗","🌱","📐","🧘","🪷","☸️","🔥","💎","🙏","📖"];
+  const isNew = !S.solveFws.find(sf=>sf.id===S.sfEditId);
+
+  let h = `<div class="page-wrap">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goSettings()">← 返回</button>
+      <span class="top-title">${isNew ? '新增解決框架' : '編輯解決框架'}</span>
+    </div>
+
+    <div class="field">
+      <label class="field-lbl">名稱</label>
+      <input class="field-input" style="font-size:${fs}px" value="${esc(S.sfeName)}" oninput="S.sfeName=this.value" placeholder="例：四正勤">
+    </div>
+
+    <div class="field">
+      <label class="field-lbl">圖示</label>
+      <div class="opt-row">`;
+  SFICONS.forEach(ic => {
+    h += `<button class="icon-btn${ic===S.sfeIcon?' sel':''}" onclick="S.sfeIcon='${ic}';render()">${ic}</button>`;
+  });
+  h += `</div></div>
+
+    <div class="field">
+      <label class="field-lbl">簡述</label>
+      <input class="field-input" style="font-size:${fs-1}px" value="${esc(S.sfeDesc)}" oninput="S.sfeDesc=this.value" placeholder="一句話描述此框架的核心理念">
+    </div>
+
+    <div class="field">
+      <label class="field-lbl">AI 提示語（Prompt）</label>
+      <textarea class="q-textarea" style="font-size:${fs-1}px;min-height:120px" oninput="S.sfePrompt=this.value" placeholder="引導 AI 如何運用此框架進行分析的指示…">${esc(S.sfePrompt)}</textarea>
+      <p style="font-size:10px;color:var(--text3);margin:2px 0 0;line-height:1.5">此提示語會在 AI 修行引導時附加到分析請求中，引導 AI 從此框架的角度給予建議。</p>
+    </div>`;
+
+  const valid = S.sfeName.trim() && S.sfePrompt.trim();
+  h += `<button class="save-btn" ${valid?'':'disabled'} onclick="saveSfEdit()">儲存解決框架</button></div>`;
   return h;
 }
 
@@ -1208,10 +1263,38 @@ window.toggleSolveFw = async (id) => {
   render();
 };
 
+// ─── Solve Framework CRUD ───
+window.goSfEdit = (id) => {
+  const sf = S.solveFws.find(s=>s.id===id);
+  if (!sf) return;
+  S.sfEditId = sf.id; S.sfeName = sf.name; S.sfeIcon = sf.icon; S.sfeDesc = sf.desc||""; S.sfePrompt = sf.prompt;
+  S.view = "solveFwEdit"; S.subView = null; render();
+};
+window.goSfNew = () => {
+  S.sfEditId = uid(); S.sfeName = ""; S.sfeIcon = "⚡"; S.sfeDesc = ""; S.sfePrompt = "";
+  S.view = "solveFwEdit"; S.subView = null; render();
+};
+window.saveSfEdit = async () => {
+  const sf = { id:S.sfEditId, name:S.sfeName.trim(), icon:S.sfeIcon, desc:S.sfeDesc.trim(), prompt:S.sfePrompt.trim() };
+  const idx = S.solveFws.findIndex(s=>s.id===sf.id);
+  if (idx>=0) S.solveFws[idx]=sf; else S.solveFws.push(sf);
+  await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
+  showToast("解決框架已儲存");
+  goSettings();
+};
+window.confirmDelSf = async (id, name) => {
+  if (!confirm(`確定刪除「${name}」？`)) return;
+  S.solveFws = S.solveFws.filter(s=>s.id!==id);
+  S.activeSolveFws = S.activeSolveFws.filter(x=>x!==id);
+  await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
+  showToast("已刪除");
+  render();
+};
+
 // ─── Auth ───
 window.doLogin = async () => {
   try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
+    await signInWithRedirect(auth, new GoogleAuthProvider());
   } catch(e) { console.error("Login error:", e); }
 };
 window.doLogout = async () => {
@@ -1224,6 +1307,9 @@ window.doLogout = async () => {
 function showLoading() {
   document.getElementById('app').innerHTML = `<div class="load-wrap"><div class="load-spin"></div><p class="load-text">載入中…</p></div>`;
 }
+
+// ─── Handle redirect result ───
+getRedirectResult(auth).catch(e => console.error("Redirect result error:", e));
 
 onAuthStateChanged(auth, async (user) => {
   if (user) {
