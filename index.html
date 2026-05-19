@@ -263,7 +263,7 @@ textarea { resize: vertical; }
 <script type="module">
 // ─── Firebase SDK ───
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js';
-import { getAuth, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider, onAuthStateChanged }
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, getDocs, deleteDoc, collection }
   from 'https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js';
@@ -1294,8 +1294,21 @@ window.confirmDelSf = async (id, name) => {
 // ─── Auth ───
 window.doLogin = async () => {
   try {
-    await signInWithRedirect(auth, new GoogleAuthProvider());
-  } catch(e) { console.error("Login error:", e); }
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  } catch(e) {
+    console.error("Popup login error:", e.code, e);
+    if (e.code === 'auth/popup-blocked' || e.code === 'auth/popup-closed-by-user'
+        || e.code === 'auth/cancelled-popup-request') {
+      // Popup was blocked, fallback to redirect
+      try { await signInWithRedirect(auth, new GoogleAuthProvider()); } catch(e2) {
+        showToast("登入失敗：" + (e2.code||e2.message));
+      }
+    } else if (e.code === 'auth/unauthorized-domain') {
+      showToast("請先到 Firebase Console 授權此網域");
+    } else {
+      showToast("登入失敗：" + (e.code||e.message));
+    }
+  }
 };
 window.doLogout = async () => {
   await signOut(auth);
