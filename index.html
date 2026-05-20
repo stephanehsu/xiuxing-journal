@@ -283,12 +283,15 @@ const auth = getAuth(fbApp);
 const db = getFirestore(fbApp);
 
 // ─── Gemini Config ───
-const GEMINI_KEY = "AIzaSyA-Wr5C-V13Hvbj63tHIrYXuxdeQujmo-U";
-const GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_GEMINI_KEY = "AIzaSyA-Wr5C-V13Hvbj63tHIrYXuxdeQujmo-U";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+function getGeminiKey() { return S.settings.geminiKey || DEFAULT_GEMINI_KEY; }
+function getGeminiModel() { return S.settings.geminiModel || DEFAULT_GEMINI_MODEL; }
 
 async function callGemini(prompt, maxTokens = 500) {
   const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${getGeminiModel()}:generateContent?key=${getGeminiKey()}`,
     { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
@@ -551,7 +554,6 @@ function render() {
   // Header
   html += `<header class="header">
     <span class="logo">☸</span><span class="title">行深日省</span>
-    <button class="hbtn" onclick="goFwPick()" title="選題">☰</button>
     <button class="hbtn" onclick="goSettings()" title="設定">⚙</button>
   </header>`;
 
@@ -561,7 +563,6 @@ function render() {
   if (S.view === "calendar") html += renderCalendar(fs);
   else if (S.view === "editor") html += renderEditor(fs, ff);
   else if (S.view === "guidance") html += renderGuidance(fs, ff);
-  else if (S.view === "fw" && S.subView === "list") html += renderFwList(fs);
   else if (S.view === "fw" && S.subView === "edit") html += renderFwEdit(fs);
   else if (S.view === "fw" && S.subView === "pick") html += renderQnPicker(fs);
   else if (S.view === "settings") html += renderSettingsView(fs, ff);
@@ -570,6 +571,7 @@ function render() {
   html += '</div>';
 
   // Bottom nav
+  const isPick = S.view==='fw' && S.subView==='pick';
   html += `<nav class="nav">
     <button class="${S.view==='calendar'?'act':''}" onclick="goCal()">
       <span class="navico">📅</span><span class="navlbl">日曆</span>
@@ -577,8 +579,8 @@ function render() {
     <button class="center-btn" onclick="goEd('${todayK()}')">
       <span class="plus-circle">＋</span>
     </button>
-    <button class="${S.view==='fw'?'act':''}" onclick="goFwList()">
-      <span class="navico">📿</span><span class="navlbl">框架</span>
+    <button class="${isPick?'act':''}" onclick="goFwPick()">
+      <span class="navico">☰</span><span class="navlbl">選題</span>
     </button>
   </nav>`;
 
@@ -825,38 +827,6 @@ function renderGuidance(fs, ff) {
   return h;
 }
 
-// ─── Framework List ───
-function renderFwList(fs) {
-  let h = `<div class="page-wrap">
-    <div class="top-bar">
-      <button class="back-btn" onclick="goCal()">← 返回</button>
-      <span class="top-title">修行框架管理</span>
-    </div>
-    <p class="sub-text">每個法門一套引導問題，可自由建立與編輯</p>
-    <div style="display:flex;flex-direction:column;gap:10px">`;
-
-  S.fws.forEach(fw => {
-    h += `<div class="fw-card" style="border-left:3px solid ${fw.color}">
-      <div class="fw-card-top">
-        <span style="font-size:20px">${fw.icon}</span>
-        <span class="fw-card-name" style="font-size:${fs}px">${esc(fw.name)}</span>
-        <span class="fw-card-count">${fw.questions.length} 題</span>
-      </div>
-      <div class="fw-card-qs">`;
-    fw.questions.slice(0,2).forEach(q => {
-      h += `<div class="fw-card-q">• ${esc(q.text)}</div>`;
-    });
-    if (fw.questions.length > 2) h += `<div class="fw-card-more">…還有 ${fw.questions.length-2} 題</div>`;
-    h += `</div>
-      <div class="fw-card-actions">
-        <button class="fw-card-btn" onclick="goFwEdit('${fw.id}')">編輯</button>
-        <button class="fw-card-btn" style="color:var(--danger)" onclick="confirmDelFw('${fw.id}','${esc(fw.name)}')">刪除</button>
-      </div>
-    </div>`;
-  });
-  h += `</div><button class="add-btn" onclick="goFwNew()">＋ 新增框架</button></div>`;
-  return h;
-}
 
 // ─── Framework Edit ───
 function renderFwEdit(fs) {
@@ -865,7 +835,7 @@ function renderFwEdit(fs) {
 
   let h = `<div class="page-wrap">
     <div class="top-bar">
-      <button class="back-btn" onclick="goFwList()">← 返回</button>
+      <button class="back-btn" onclick="goSettings()">← 返回</button>
       <span class="top-title">${S.feName ? `編輯：${esc(S.feName)}` : '新增框架'}</span>
     </div>
 
@@ -956,7 +926,7 @@ function renderQnPicker(fs) {
 
   if (!S.fws.length) {
     h += `<div class="empty-state"><p class="empty-text">尚無框架</p>
-      <button class="save-btn" style="width:auto;padding:10px 24px;margin:8px auto 0" onclick="goFwList()">前往建立</button></div>`;
+      <button class="save-btn" style="width:auto;padding:10px 24px;margin:8px auto 0" onclick="goSettings()">前往設定建立</button></div>`;
   }
 
   h += `</div>
@@ -964,7 +934,6 @@ function renderQnPicker(fs) {
       <span style="font-size:${fs-1}px;opacity:.5;flex:1">已選 ${S._pickSel.size} 題</span>
       <button class="save-btn" style="flex:1;margin:0" onclick="savePickedQs()">確認選擇</button>
     </div>
-    <button class="manage-link" onclick="goFwList()">管理框架 →</button>
   </div>`;
   return h;
 }
@@ -1003,6 +972,49 @@ function renderSettingsView(fs, ff) {
     <div class="field">
       <label class="field-lbl">預覽</label>
       <div class="preview-box" style="font-family:${curFont.value};font-size:${curSize.size}px">${preview}</div>
+    </div>
+
+    <div class="field">
+      <label class="field-lbl">✦ 修行框架管理</label>
+      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">每個法門一套引導問題，可自由建立與編輯</p>
+      <div style="display:flex;flex-direction:column;gap:8px">`;
+  S.fws.forEach(fw => {
+    h += `<div style="background:#fff;border:1px solid var(--border);border-left:3px solid ${fw.color};border-radius:8px;padding:10px 12px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">${fw.icon}</span>
+        <div style="flex:1;cursor:pointer" onclick="goFwEdit('${fw.id}')">
+          <div style="font-weight:600;font-size:13px">${esc(fw.name)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${fw.questions.length} 題</div>
+        </div>
+        <button style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 6px;cursor:pointer" onclick="goFwEdit('${fw.id}')">✎</button>
+        <button style="background:none;border:none;color:var(--danger);font-size:12px;padding:2px 6px;cursor:pointer" onclick="confirmDelFw('${fw.id}','${esc(fw.name)}')">✕</button>
+      </div>
+    </div>`;
+  });
+  h += `</div>
+      <button class="add-btn" onclick="goFwNew()">＋ 新增框架</button>
+    </div>
+
+    <div class="field">
+      <label class="field-lbl">✦ AI 模型設定</label>
+      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">設定 Gemini API Key 與模型名稱，留空則使用預設值</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">API Key</div>
+          <input class="field-input" id="inpGeminiKey" type="password" 
+            value="${esc(S.settings.geminiKey||'')}" 
+            placeholder="預設：AIzaSyA-Wr5C...（內建）"
+            style="font-size:12px;font-family:monospace">
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:3px">模型名稱</div>
+          <input class="field-input" id="inpGeminiModel" 
+            value="${esc(S.settings.geminiModel||'')}" 
+            placeholder="預設：gemini-2.5-flash"
+            style="font-size:12px;font-family:monospace">
+        </div>
+        <button class="save-btn" style="padding:8px;font-size:12px" onclick="saveGeminiSettings()">儲存 AI 設定</button>
+      </div>
     </div>
 
     <div class="field">
@@ -1099,7 +1111,6 @@ window.goEd = (d) => {
   render();
 };
 window.goSettings = () => { S.view="settings"; S.subView=null; render(); };
-window.goFwList = () => { S.view="fw"; S.subView="list"; render(); };
 window.goFwPick = () => { S.view="fw"; S.subView="pick"; S._pickSel=new Set(S.activeQs.map(q=>q.id)); render(); };
 window.goFwEdit = (id) => {
   const fw = S.fws.find(f=>f.id===id);
@@ -1209,7 +1220,7 @@ window.saveFwEdit = async () => {
   const idx = S.fws.findIndex(f=>f.id===fw.id);
   if (idx>=0) S.fws[idx]=fw; else S.fws.push(fw);
   showToast("框架已儲存");
-  goFwList();
+  goSettings();
 };
 window.confirmDelFw = async (id, name) => {
   if (!confirm(`確定刪除「${name}」？`)) return;
@@ -1262,6 +1273,16 @@ window.toggleSolveFw = async (id) => {
   else S.activeSolveFws.push(id);
   await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
   render();
+};
+
+// ─── Gemini Settings ───
+window.saveGeminiSettings = async () => {
+  const key = document.getElementById('inpGeminiKey')?.value.trim() || '';
+  const model = document.getElementById('inpGeminiModel')?.value.trim() || '';
+  S.settings.geminiKey = key;
+  S.settings.geminiModel = model;
+  await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
+  showToast("AI 設定已儲存");
 };
 
 // ─── Solve Framework CRUD ───
@@ -1345,6 +1366,8 @@ onAuthStateChanged(auth, async (user) => {
     if (stgDoc) {
       if (stgDoc.fontId) S.settings.fontId = stgDoc.fontId;
       if (stgDoc.sizeId) S.settings.sizeId = stgDoc.sizeId;
+      if (stgDoc.geminiKey) S.settings.geminiKey = stgDoc.geminiKey;
+      if (stgDoc.geminiModel) S.settings.geminiModel = stgDoc.geminiModel;
       if (stgDoc.activeQuestions) S.activeQs = stgDoc.activeQuestions;
       if (stgDoc.solveFws) S.solveFws = stgDoc.solveFws;
       if (stgDoc.activeSolveFws) S.activeSolveFws = stgDoc.activeSolveFws;
