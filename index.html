@@ -429,6 +429,37 @@ function loadGFont(name) {
 }
 
 // ─── AI Functions ───
+function tryParseJSON(text) {
+  // Extract JSON block from text
+  let match = text.match(/```json\s*([\s\S]*?)```/);
+  let raw = match ? match[1].trim() : text;
+  match = raw.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  raw = match[0];
+  // Try direct parse first
+  try { return JSON.parse(raw); } catch(e) {}
+  // Repair common issues: trailing commas, unescaped newlines, truncated end
+  let fixed = raw
+    .replace(/,\s*([\]}])/g, '$1')           // trailing commas
+    .replace(/([^\\])\\n/g, '$1\\\\n')       // unescaped \n in strings
+    .replace(/[\x00-\x1f]/g, ' ');           // control chars
+  // Try closing truncated JSON
+  const opens = (fixed.match(/\{/g)||[]).length;
+  const closes = (fixed.match(/\}/g)||[]).length;
+  for (let i = 0; i < opens - closes; i++) fixed += '}';
+  const openB = (fixed.match(/\[/g)||[]).length;
+  const closeB = (fixed.match(/\]/g)||[]).length;
+  for (let i = 0; i < openB - closeB; i++) fixed += ']';
+  // Remove trailing incomplete key-value
+  fixed = fixed.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, '');
+  // Re-close
+  const opens2 = (fixed.match(/\{/g)||[]).length;
+  const closes2 = (fixed.match(/\}/g)||[]).length;
+  for (let i = 0; i < opens2 - closes2; i++) fixed += '}';
+  try { return JSON.parse(fixed); } catch(e2) {}
+  return null;
+}
+
 async function aiAutoTag(answers, questions) {
   const answered = questions.filter(q => answers[q.id]?.trim());
   if (!answered.length) return {};
@@ -443,9 +474,8 @@ async function aiAutoTag(answers, questions) {
 ${qList}`;
   try {
     const text = await callGemini(prompt, 500);
-    const match = text.match(/\{[\s\S]*?\}/);
-    if (match) {
-      const obj = JSON.parse(match[0]);
+    const obj = tryParseJSON(text);
+    if (obj) {
       const result = {};
       for (const [qId, tags] of Object.entries(obj)) {
         if (Array.isArray(tags)) result[qId] = tags.map(t=>`#${t.replace("#","")}`);
@@ -487,15 +517,17 @@ async function aiGuidance(answers, questions, solveFwsList) {
 - perQuestion 的 key 必須是問題 ID（如 dz1, ys3）
 - 語氣溫和鼓勵，像善知識而非批判者
 - 佛法觀點要引用具體經典名稱
-- 行動建議要非常具體、明日即可執行${sfText}
+- 行動建議要非常具體、明日即可執行
+- 所有字串值中不要使用換行符號${sfText}
 
 修行者的反省記錄：
 
 ${qList}`;
   try {
     const text = await callGemini(prompt, 2000);
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    const obj = tryParseJSON(text);
+    if (obj) return obj;
+    console.warn("AI guidance: JSON parse failed, raw:", text);
   } catch(e) { console.error("AI guidance error:", e); }
   return null;
 }
