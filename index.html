@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.7";
+const APP_VERSION = "v0.0.0.8";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -619,9 +619,11 @@ function render() {
   app.innerHTML = html;
   applyFont();
 
-  // Scroll to top
+  // Scroll to top only when page changed
+  const curPage = S.view + (S.subView||'');
   const main = document.getElementById('mainArea');
-  if (main) main.scrollTop = 0;
+  if (main && curPage !== render._lastPage) main.scrollTop = 0;
+  render._lastPage = curPage;
 }
 
 // ─── Login Page ───
