@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.5";
+const APP_VERSION = "v0.0.0.6";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -897,7 +897,7 @@ function renderFwEdit(fs) {
         <button style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer" 
           onclick="saveFeQText(${i},document.getElementById('feQ_${i}').value)">存</button>
         <button style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:2px 4px" 
-          onclick="S._feEditIdx=-1;render()">✕</button>
+          onclick="cancelFeQEdit()">✕</button>
       </div>`;
     } else {
       h += `<div class="q-item">
@@ -906,7 +906,7 @@ function renderFwEdit(fs) {
         <div class="q-acts">
           <button class="q-act-btn" onclick="moveFeQ(${i},-1)">↑</button>
           <button class="q-act-btn" onclick="moveFeQ(${i},1)">↓</button>
-          <button class="q-act-btn" onclick="S._feEditIdx=${i};render()">✎</button>
+          <button class="q-act-btn" onclick="startFeQEdit(${i})">✎</button>
           <button class="q-act-btn" style="color:var(--danger)" onclick="rmFeQ(${i})">✕</button>
         </div>
       </div>`;
@@ -1244,6 +1244,8 @@ window.toggleGuideQ = (qId) => {
 };
 
 // ─── Framework edit actions ───
+window.startFeQEdit = (i) => { S._feEditIdx = i; render(); };
+window.cancelFeQEdit = () => { S._feEditIdx = -1; render(); };
 window.saveFeQText = (i, text) => {
   const t = text.trim();
   if (!t) return;
