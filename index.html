@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.6";
+const APP_VERSION = "v0.0.0.7";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -710,13 +710,13 @@ function renderEditor(fs, ff) {
     const grouped = {};
     S.activeQs.forEach(q => {
       const k = q.fwName || "其他";
-      if (!grouped[k]) grouped[k] = { icon: q.fwIcon||"📿", qs: [] };
+      if (!grouped[k]) grouped[k] = { qs: [] };
       grouped[k].qs.push(q);
     });
 
     h += '<div style="display:flex;flex-direction:column;gap:10px">';
-    for (const [fwN, {icon, qs}] of Object.entries(grouped)) {
-      h += `<div class="ed-fw-label">${icon} ${esc(fwN)}</div>`;
+    for (const [fwN, {qs}] of Object.entries(grouped)) {
+      h += `<div class="ed-fw-label">${esc(fwN)}</div>`;
       qs.forEach((q, idx) => {
         const myTags = S.edQTags[q.id] || [];
         const val = S.edAns[q.id] || '';
@@ -862,8 +862,6 @@ function renderGuidance(fs, ff) {
 
 // ─── Framework Edit ───
 function renderFwEdit(fs) {
-  const ICONS = ["🌏","💎","🪷","📿","🕉️","☸️","🙏","🔔","✨","🏔️"];
-  const COLORS = ["#C9A96E","#3D85C6","#9B72AA","#E07A5F","#81B29A","#577590","#F2CC8F","#F4845F"];
 
   let h = `<div class="page-wrap">
     <div class="top-bar">
@@ -877,21 +875,13 @@ function renderFwEdit(fs) {
     </div>
 
     <div class="field">
-      <label class="field-lbl">主色</label>
-      <div class="opt-row">`;
-  COLORS.forEach(c => {
-    h += `<button class="color-dot${c===S.feColor?' sel':''}" style="background:${c};${c===S.feColor?`box-shadow:0 0 0 2px var(--text),0 0 0 4px ${c}`:''}" onclick="S.feColor='${c}';render()"></button>`;
-  });
-  h += `</div></div>
-
-    <div class="field">
       <label class="field-lbl">引導問題（${S.feQs.length}）</label>
       <div class="q-list">`;
   if (!S._feEditIdx && S._feEditIdx !== 0) S._feEditIdx = -1;
   S.feQs.forEach((q,i) => {
     if (S._feEditIdx === i) {
       h += `<div class="q-item">
-        <span class="q-num" style="background:${S.feColor}33;color:${S.feColor}">${i+1}</span>
+        <span class="q-num" style="background:var(--gold)33;color:var(--gold)">${i+1}</span>
         <input id="feQ_${i}" style="flex:1;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);outline:none;font-size:${fs-1}px"
           value="${esc(q.text)}" onkeydown="if(event.key==='Enter')saveFeQText(${i},this.value)">
         <button style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer" 
@@ -901,7 +891,7 @@ function renderFwEdit(fs) {
       </div>`;
     } else {
       h += `<div class="q-item">
-        <span class="q-num" style="background:${S.feColor}33;color:${S.feColor}">${i+1}</span>
+        <span class="q-num" style="background:rgba(138,114,48,0.2);color:var(--gold)">${i+1}</span>
         <span style="flex:1;font-size:${fs-1}px;color:var(--text);line-height:1.5">${esc(q.text)}</span>
         <div class="q-acts">
           <button class="q-act-btn" onclick="moveFeQ(${i},-1)">↑</button>
@@ -944,16 +934,15 @@ function renderQnPicker(fs) {
     const allS = sc===ids.length && ids.length>0;
     h += `<div>
       <div class="pick-fw-head" onclick="togglePickAll('${fw.id}')">
-        <span class="pick-fw-ico" style="background:${fw.color}22;color:${fw.color}">${fw.icon}</span>
         <span class="pick-fw-name" style="font-size:${fs}px">${esc(fw.name)}</span>
         <span class="pick-fw-cnt">${sc}/${fw.questions.length}</span>
-        <span class="checkbox" style="${allS?`background:${fw.color};border-color:${fw.color}`:''}">${allS?'✓':''}</span>
+        <span class="checkbox" style="${allS?'background:var(--gold);border-color:var(--gold)':''}">${allS?'✓':''}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:3px;padding-left:8px">`;
     fw.questions.forEach(q => {
       const on = S._pickSel.has(q.id);
-      h += `<button class="pick-q" style="${on?`background:${fw.color}12;border-color:${fw.color}44`:''}" onclick="togglePick('${q.id}')">
-        <span class="checkbox-sm" style="${on?`background:${fw.color};border-color:${fw.color}`:''}">${on?'✓':''}</span>
+      h += `<button class="pick-q" style="${on?'background:rgba(138,114,48,0.07);border-color:rgba(138,114,48,0.25)':''}" onclick="togglePick('${q.id}')">
+        <span class="checkbox-sm" style="${on?'background:var(--gold);border-color:var(--gold)':''}">${on?'✓':''}</span>
         <span style="line-height:1.55;color:var(--text2);font-size:${fs-1}px">${esc(q.text)}</span>
       </button>`;
     });
@@ -1015,9 +1004,8 @@ function renderSettingsView(fs, ff) {
       <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">每個法門一套引導問題，點 ✎ 可編輯框架與題目</p>
       <div style="display:flex;flex-direction:column;gap:8px">`;
   S.fws.forEach(fw => {
-    h += `<div style="background:#fff;border:1px solid var(--border);border-left:3px solid ${fw.color};border-radius:8px;padding:10px 12px">
+    h += `<div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px">
       <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:18px">${fw.icon}</span>
         <div style="flex:1;cursor:pointer" onclick="goFwEdit('${fw.id}')">
           <div style="font-weight:600;font-size:13px">${esc(fw.name)}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${fw.questions.length} 題</div>
