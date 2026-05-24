@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.3";
+const APP_VERSION = "v0.0.0.5";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -873,7 +873,7 @@ function renderFwEdit(fs) {
 
     <div class="field">
       <label class="field-lbl">框架名稱</label>
-      <input class="field-input" style="font-size:${fs}px" value="${esc(S.feName)}" oninput="S.feName=this.value" placeholder="例：藥師經">
+      <input id="feNameInput" class="field-input" style="font-size:${fs}px" value="${esc(S.feName)}" placeholder="例：藥師經">
     </div>
 
     <div class="field">
@@ -887,29 +887,42 @@ function renderFwEdit(fs) {
     <div class="field">
       <label class="field-lbl">引導問題（${S.feQs.length}）</label>
       <div class="q-list">`;
+  if (!S._feEditIdx && S._feEditIdx !== 0) S._feEditIdx = -1;
   S.feQs.forEach((q,i) => {
-    h += `<div class="q-item">
-      <span class="q-num" style="background:${S.feColor}33;color:${S.feColor}">${i+1}</span>
-      <input style="flex:1;background:none;border:none;color:var(--text);outline:none;font-size:${fs-1}px"
-        value="${esc(q.text)}" oninput="S.feQs[${i}].text=this.value">
-      <div class="q-acts">
-        <button class="q-act-btn" onclick="moveFeQ(${i},-1)">↑</button>
-        <button class="q-act-btn" onclick="moveFeQ(${i},1)">↓</button>
-        <button class="q-act-btn" style="color:var(--danger)" onclick="rmFeQ(${i})">✕</button>
-      </div>
-    </div>`;
+    if (S._feEditIdx === i) {
+      h += `<div class="q-item">
+        <span class="q-num" style="background:${S.feColor}33;color:${S.feColor}">${i+1}</span>
+        <input id="feQ_${i}" style="flex:1;background:#fff;border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);outline:none;font-size:${fs-1}px"
+          value="${esc(q.text)}" onkeydown="if(event.key==='Enter')saveFeQText(${i},this.value)">
+        <button style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer" 
+          onclick="saveFeQText(${i},document.getElementById('feQ_${i}').value)">存</button>
+        <button style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:2px 4px" 
+          onclick="S._feEditIdx=-1;render()">✕</button>
+      </div>`;
+    } else {
+      h += `<div class="q-item">
+        <span class="q-num" style="background:${S.feColor}33;color:${S.feColor}">${i+1}</span>
+        <span style="flex:1;font-size:${fs-1}px;color:var(--text);line-height:1.5">${esc(q.text)}</span>
+        <div class="q-acts">
+          <button class="q-act-btn" onclick="moveFeQ(${i},-1)">↑</button>
+          <button class="q-act-btn" onclick="moveFeQ(${i},1)">↓</button>
+          <button class="q-act-btn" onclick="S._feEditIdx=${i};render()">✎</button>
+          <button class="q-act-btn" style="color:var(--danger)" onclick="rmFeQ(${i})">✕</button>
+        </div>
+      </div>`;
+    }
   });
   h += `</div>
       <div class="add-row">
-        <input style="flex:1;background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);outline:none;font-size:${fs-1}px"
-          value="${esc(S.feNewQ)}" oninput="S.feNewQ=this.value" placeholder="新增問題…"
-          onkeydown="if(event.key==='Enter')addFeQ()">
-        <button style="background:rgba(138,114,48,0.12);border:none;border-radius:10px;padding:9px 14px;color:var(--gold);font-size:13px;font-weight:600" onclick="addFeQ()">新增</button>
+        <input id="feNewQInput" style="flex:1;background:#fff;border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);outline:none;font-size:${fs-1}px"
+          placeholder="新增問題…"
+          onkeydown="if(event.key==='Enter'){addFeQ(this.value);this.value=''}">
+        <button style="background:rgba(138,114,48,0.12);border:none;border-radius:10px;padding:9px 14px;color:var(--gold);font-size:13px;font-weight:600" 
+          onclick="var inp=document.getElementById('feNewQInput');addFeQ(inp.value);inp.value=''">新增</button>
       </div>
     </div>`;
 
-  const valid = S.feName.trim() && S.feQs.length > 0;
-  h += `<button class="save-btn" ${valid?'':'disabled'} onclick="saveFwEdit()">儲存框架</button></div>`;
+  h += `<button class="save-btn" onclick="saveFwEdit()">儲存框架</button></div>`;
   return h;
 }
 
@@ -1231,18 +1244,31 @@ window.toggleGuideQ = (qId) => {
 };
 
 // ─── Framework edit actions ───
-window.addFeQ = () => { if (!S.feNewQ.trim()) return; S.feQs.push({id:uid(),text:S.feNewQ.trim()}); S.feNewQ=""; render(); };
+window.saveFeQText = (i, text) => {
+  const t = text.trim();
+  if (!t) return;
+  S.feQs[i].text = t;
+  S._feEditIdx = -1;
+  render();
+};
+window.addFeQ = (text) => { 
+  const t = (text||'').trim(); 
+  if (!t) return; 
+  S.feQs.push({id:uid(),text:t}); 
+  render(); 
+};
 window.rmFeQ = (i) => { S.feQs.splice(i,1); render(); };
 window.moveFeQ = (i,dir) => {
   const j=i+dir; if(j<0||j>=S.feQs.length) return;
   [S.feQs[i],S.feQs[j]]=[S.feQs[j],S.feQs[i]]; render();
 };
 window.saveFwEdit = async () => {
+  const nameInp = document.getElementById('feNameInput');
+  if (nameInp) S.feName = nameInp.value;
   const fw = { ...S.editFw, name:S.feName.trim(), icon:S.feIcon, color:S.feColor, questions:S.feQs };
   await saveFw(fw);
   const idx = S.fws.findIndex(f=>f.id===fw.id);
   if (idx>=0) S.fws[idx]=fw; else S.fws.push(fw);
-  // Sync activeQs with updated question text
   S.activeQs = S.activeQs.map(aq => {
     if (aq.fwId === fw.id) {
       const q = fw.questions.find(q=>q.id===aq.id);
