@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.8";
+const APP_VERSION = "v0.0.0.9";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -430,32 +430,42 @@ function loadGFont(name) {
 
 // ─── AI Functions ───
 function tryParseJSON(text) {
-  // Extract JSON block from text
+  // Extract JSON block from markdown fences
   let match = text.match(/```json\s*([\s\S]*?)```/);
   let raw = match ? match[1].trim() : text;
-  match = raw.match(/\{[\s\S]*\}/);
+  // If fenced block was truncated (no closing ```), grab everything after ```json
+  if (!match) {
+    match = text.match(/```json\s*([\s\S]*)/);
+    if (match) raw = match[1].trim();
+  }
+  match = raw.match(/\{[\s\S]*/);
   if (!match) return null;
   raw = match[0];
   // Try direct parse first
   try { return JSON.parse(raw); } catch(e) {}
-  // Repair common issues: trailing commas, unescaped newlines, truncated end
+  // Repair common issues
   let fixed = raw
     .replace(/,\s*([\]}])/g, '$1')           // trailing commas
-    .replace(/([^\\])\\n/g, '$1\\\\n')       // unescaped \n in strings
     .replace(/[\x00-\x1f]/g, ' ');           // control chars
-  // Try closing truncated JSON
-  const opens = (fixed.match(/\{/g)||[]).length;
-  const closes = (fixed.match(/\}/g)||[]).length;
-  for (let i = 0; i < opens - closes; i++) fixed += '}';
-  const openB = (fixed.match(/\[/g)||[]).length;
-  const closeB = (fixed.match(/\]/g)||[]).length;
-  for (let i = 0; i < openB - closeB; i++) fixed += ']';
-  // Remove trailing incomplete key-value
-  fixed = fixed.replace(/,\s*"[^"]*"?\s*:?\s*"?[^"]*$/, '');
-  // Re-close
-  const opens2 = (fixed.match(/\{/g)||[]).length;
-  const closes2 = (fixed.match(/\}/g)||[]).length;
-  for (let i = 0; i < opens2 - closes2; i++) fixed += '}';
+  // Close any unclosed strings
+  const quoteCount = (fixed.match(/(?<!\\)"/g)||[]).length;
+  if (quoteCount % 2 !== 0) fixed += '"';
+  // Remove trailing incomplete value after last complete entry
+  // e.g. ..."key": "value that got cut
+  fixed = fixed.replace(/,\s*"[^"]*"\s*:\s*"[^"]*$/,'');
+  // Also handle truncated array items: ..."text that got cut
+  fixed = fixed.replace(/,\s*"[^"]*$/,'');
+  // Remove trailing commas again after cleanup
+  fixed = fixed.replace(/,\s*([\]}])/g, '$1');
+  // Close brackets/braces
+  for (let pass = 0; pass < 3; pass++) {
+    const ob = (fixed.match(/\[/g)||[]).length - (fixed.match(/\]/g)||[]).length;
+    for (let i = 0; i < ob; i++) fixed += ']';
+    const oc = (fixed.match(/\{/g)||[]).length - (fixed.match(/\}/g)||[]).length;
+    for (let i = 0; i < oc; i++) fixed += '}';
+    // Remove new trailing commas from closure
+    fixed = fixed.replace(/,\s*([\]}])/g, '$1');
+  }
   try { return JSON.parse(fixed); } catch(e2) {}
   return null;
 }
@@ -524,7 +534,7 @@ async function aiGuidance(answers, questions, solveFwsList) {
 
 ${qList}`;
   try {
-    const text = await callGemini(prompt, 2000);
+    const text = await callGemini(prompt, 4000);
     const obj = tryParseJSON(text);
     if (obj) return obj;
     console.warn("AI guidance: JSON parse failed, raw:", text);
