@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.0";
+const APP_VERSION = "v0.0.0.2";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -923,17 +923,14 @@ function renderFwEdit(fs) {
 
 // ─── Question Picker ───
 function renderQnPicker(fs) {
-  // Use a temp Set stored on S
   if (!S._pickSel) S._pickSel = new Set(S.activeQs.map(q=>q.id));
-  // Track which question is being edited
-  if (!S._pickEditId) S._pickEditId = null;
 
   let h = `<div class="page-wrap">
     <div class="top-bar">
       <button class="back-btn" onclick="goCal()">← 返回</button>
       <span class="top-title">選擇每日自省問題</span>
     </div>
-    <p class="sub-text">從不同框架中挑選你想每日反思的問題，點 ✎ 可編輯題目</p>
+    <p class="sub-text">從不同框架中挑選你想每日反思的問題</p>
     <div style="display:flex;flex-direction:column;gap:14px">`;
 
   S.fws.forEach(fw => {
@@ -948,27 +945,12 @@ function renderQnPicker(fs) {
         <span class="checkbox" style="${allS?`background:${fw.color};border-color:${fw.color}`:''}">${allS?'✓':''}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:3px;padding-left:8px">`;
-    fw.questions.forEach((q, qi) => {
+    fw.questions.forEach(q => {
       const on = S._pickSel.has(q.id);
-      const isEditing = S._pickEditId === q.id;
-      if (isEditing) {
-        h += `<div class="pick-q" style="background:${fw.color}12;border-color:${fw.color}44;gap:6px;align-items:center">
-          <input class="field-input" style="flex:1;font-size:${fs-1}px;padding:6px 8px" 
-            value="${esc(q.text)}" id="pickEdit_${q.id}"
-            onkeydown="if(event.key==='Enter')savePickQText('${fw.id}','${q.id}',this.value)">
-          <button style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap"
-            onclick="savePickQText('${fw.id}','${q.id}',document.getElementById('pickEdit_${q.id}').value)">存</button>
-          <button style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 6px"
-            onclick="S._pickEditId=null;render()">✕</button>
-        </div>`;
-      } else {
-        h += `<div class="pick-q" style="${on?`background:${fw.color}12;border-color:${fw.color}44`:''}; display:flex;align-items:center">
-          <span class="checkbox-sm" style="${on?`background:${fw.color};border-color:${fw.color}`:''};cursor:pointer" onclick="togglePick('${q.id}')">${on?'✓':''}</span>
-          <span style="line-height:1.55;color:var(--text2);font-size:${fs-1}px;flex:1;cursor:pointer" onclick="togglePick('${q.id}')">${esc(q.text)}</span>
-          <button style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 6px;flex-shrink:0" 
-            onclick="event.stopPropagation();S._pickEditId='${q.id}';render()">✎</button>
-        </div>`;
-      }
+      h += `<button class="pick-q" style="${on?`background:${fw.color}12;border-color:${fw.color}44`:''}" onclick="togglePick('${q.id}')">
+        <span class="checkbox-sm" style="${on?`background:${fw.color};border-color:${fw.color}`:''}">${on?'✓':''}</span>
+        <span style="line-height:1.55;color:var(--text2);font-size:${fs-1}px">${esc(q.text)}</span>
+      </button>`;
     });
     h += '</div></div>';
   });
@@ -1025,20 +1007,58 @@ function renderSettingsView(fs, ff) {
 
     <div class="field">
       <label class="field-lbl">✦ 修行框架管理</label>
-      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">每個法門一套引導問題，可自由建立與編輯</p>
+      <p style="font-size:11px;color:var(--text3);margin:0 0 6px;line-height:1.5">每個法門一套引導問題，點展開可直接編輯題目</p>
       <div style="display:flex;flex-direction:column;gap:8px">`;
+  // Track which framework is expanded for question editing
+  if (!S._fwExpand) S._fwExpand = {};
   S.fws.forEach(fw => {
+    const expanded = S._fwExpand[fw.id];
     h += `<div style="background:#fff;border:1px solid var(--border);border-left:3px solid ${fw.color};border-radius:8px;padding:10px 12px">
       <div style="display:flex;align-items:center;gap:8px">
         <span style="font-size:18px">${fw.icon}</span>
-        <div style="flex:1;cursor:pointer" onclick="goFwEdit('${fw.id}')">
+        <div style="flex:1;cursor:pointer" onclick="toggleFwExpand('${fw.id}')">
           <div style="font-weight:600;font-size:13px">${esc(fw.name)}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">${fw.questions.length} 題</div>
         </div>
-        <button style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 6px;cursor:pointer" onclick="goFwEdit('${fw.id}')">✎</button>
+        <button style="background:none;border:none;color:var(--text3);font-size:14px;padding:2px 6px;cursor:pointer;transition:transform .2s;${expanded?'transform:rotate(180deg)':''}" onclick="toggleFwExpand('${fw.id}')">▼</button>
+        <button style="background:none;border:none;color:var(--text3);font-size:12px;padding:2px 6px;cursor:pointer" onclick="goFwEdit('${fw.id}')" title="編輯框架資訊">✎</button>
         <button style="background:none;border:none;color:var(--danger);font-size:12px;padding:2px 6px;cursor:pointer" onclick="confirmDelFw('${fw.id}','${esc(fw.name)}')">✕</button>
-      </div>
-    </div>`;
+      </div>`;
+    if (expanded) {
+      h += `<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">`;
+      fw.questions.forEach((q, qi) => {
+        const isEditing = S._settingsEditQId === q.id;
+        if (isEditing) {
+          h += `<div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:11px;color:${fw.color};font-weight:600;width:20px;text-align:center">${qi+1}</span>
+            <input class="field-input" style="flex:1;font-size:12px;padding:5px 8px" value="${esc(q.text)}" id="sqEdit_${q.id}"
+              onkeydown="if(event.key==='Enter')saveSettingsQText('${fw.id}','${q.id}',document.getElementById('sqEdit_${q.id}').value)">
+            <button style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer" 
+              onclick="saveSettingsQText('${fw.id}','${q.id}',document.getElementById('sqEdit_${q.id}').value)">存</button>
+            <button style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 4px" 
+              onclick="S._settingsEditQId=null;render()">✕</button>
+          </div>`;
+        } else {
+          h += `<div style="display:flex;align-items:center;gap:4px;padding:3px 0">
+            <span style="font-size:11px;color:${fw.color};font-weight:600;width:20px;text-align:center">${qi+1}</span>
+            <span style="flex:1;font-size:12px;color:var(--text2);line-height:1.5">${esc(q.text)}</span>
+            <button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;padding:1px 4px" onclick="moveSettingsQ('${fw.id}',${qi},-1)" title="上移">↑</button>
+            <button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;padding:1px 4px" onclick="moveSettingsQ('${fw.id}',${qi},1)" title="下移">↓</button>
+            <button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;padding:1px 4px" onclick="S._settingsEditQId='${q.id}';render()">✎</button>
+            <button style="background:none;border:none;color:var(--danger);font-size:10px;cursor:pointer;padding:1px 4px" onclick="delSettingsQ('${fw.id}','${q.id}')">✕</button>
+          </div>`;
+        }
+      });
+      // Add new question row
+      h += `<div style="display:flex;align-items:center;gap:4px;margin-top:4px">
+        <input class="field-input" style="flex:1;font-size:12px;padding:5px 8px" placeholder="新增問題…" id="sqNew_${fw.id}"
+          onkeydown="if(event.key==='Enter')addSettingsQ('${fw.id}',this.value)">
+        <button style="background:rgba(138,114,48,0.12);border:none;border-radius:6px;padding:4px 10px;color:var(--gold);font-size:11px;font-weight:600;cursor:pointer"
+          onclick="addSettingsQ('${fw.id}',document.getElementById('sqNew_${fw.id}').value)">新增</button>
+      </div>`;
+      h += `</div>`;
+    }
+    h += `</div>`;
   });
   h += `</div>
       <button class="add-btn" onclick="goFwNew()">＋ 新增框架</button>
@@ -1304,23 +1324,63 @@ window.savePickedQs = async () => {
   goCal();
 };
 
-window.savePickQText = async (fwId, qId, newText) => {
+// ─── Settings: Question editing within frameworks ───
+window.toggleFwExpand = (fwId) => {
+  if (!S._fwExpand) S._fwExpand = {};
+  S._fwExpand[fwId] = !S._fwExpand[fwId];
+  render();
+};
+
+window.saveSettingsQText = async (fwId, qId, newText) => {
   const text = newText.trim();
   if (!text) return;
-  // Update in framework
   const fw = S.fws.find(f=>f.id===fwId);
-  if (fw) {
-    const q = fw.questions.find(q=>q.id===qId);
-    if (q) { q.text = text; await saveFw(fw); }
-  }
-  // Also update in activeQs if selected
+  if (!fw) return;
+  const q = fw.questions.find(q=>q.id===qId);
+  if (q) { q.text = text; await saveFw(fw); }
+  // Also update in activeQs
   const aq = S.activeQs.find(q=>q.id===qId);
   if (aq) {
     aq.text = text;
     await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
   }
-  S._pickEditId = null;
+  S._settingsEditQId = null;
   showToast("題目已更新");
+  render();
+};
+
+window.addSettingsQ = async (fwId, text) => {
+  const t = text.trim();
+  if (!t) return;
+  const fw = S.fws.find(f=>f.id===fwId);
+  if (!fw) return;
+  fw.questions.push({ id: uid(), text: t });
+  await saveFw(fw);
+  showToast("已新增問題");
+  render();
+};
+
+window.delSettingsQ = async (fwId, qId) => {
+  const fw = S.fws.find(f=>f.id===fwId);
+  if (!fw) return;
+  fw.questions = fw.questions.filter(q=>q.id!==qId);
+  await saveFw(fw);
+  // Also remove from activeQs if present
+  S.activeQs = S.activeQs.filter(q=>q.id!==qId);
+  await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
+  showToast("已刪除問題");
+  render();
+};
+
+window.moveSettingsQ = async (fwId, idx, dir) => {
+  const fw = S.fws.find(f=>f.id===fwId);
+  if (!fw) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= fw.questions.length) return;
+  const tmp = fw.questions[idx];
+  fw.questions[idx] = fw.questions[newIdx];
+  fw.questions[newIdx] = tmp;
+  await saveFw(fw);
   render();
 };
 
