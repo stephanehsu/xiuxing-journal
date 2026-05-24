@@ -925,13 +925,15 @@ function renderFwEdit(fs) {
 function renderQnPicker(fs) {
   // Use a temp Set stored on S
   if (!S._pickSel) S._pickSel = new Set(S.activeQs.map(q=>q.id));
+  // Track which question is being edited
+  if (!S._pickEditId) S._pickEditId = null;
 
   let h = `<div class="page-wrap">
     <div class="top-bar">
       <button class="back-btn" onclick="goCal()">← 返回</button>
       <span class="top-title">選擇每日自省問題</span>
     </div>
-    <p class="sub-text">從不同框架中挑選你想每日反思的問題</p>
+    <p class="sub-text">從不同框架中挑選你想每日反思的問題，點 ✎ 可編輯題目</p>
     <div style="display:flex;flex-direction:column;gap:14px">`;
 
   S.fws.forEach(fw => {
@@ -946,12 +948,27 @@ function renderQnPicker(fs) {
         <span class="checkbox" style="${allS?`background:${fw.color};border-color:${fw.color}`:''}">${allS?'✓':''}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:3px;padding-left:8px">`;
-    fw.questions.forEach(q => {
+    fw.questions.forEach((q, qi) => {
       const on = S._pickSel.has(q.id);
-      h += `<button class="pick-q" style="${on?`background:${fw.color}12;border-color:${fw.color}44`:''}" onclick="togglePick('${q.id}')">
-        <span class="checkbox-sm" style="${on?`background:${fw.color};border-color:${fw.color}`:''}">${on?'✓':''}</span>
-        <span style="line-height:1.55;color:var(--text2);font-size:${fs-1}px">${esc(q.text)}</span>
-      </button>`;
+      const isEditing = S._pickEditId === q.id;
+      if (isEditing) {
+        h += `<div class="pick-q" style="background:${fw.color}12;border-color:${fw.color}44;gap:6px;align-items:center">
+          <input class="field-input" style="flex:1;font-size:${fs-1}px;padding:6px 8px" 
+            value="${esc(q.text)}" id="pickEdit_${q.id}"
+            onkeydown="if(event.key==='Enter')savePickQText('${fw.id}','${q.id}',this.value)">
+          <button style="background:var(--gold);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap"
+            onclick="savePickQText('${fw.id}','${q.id}',document.getElementById('pickEdit_${q.id}').value)">存</button>
+          <button style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:4px 6px"
+            onclick="S._pickEditId=null;render()">✕</button>
+        </div>`;
+      } else {
+        h += `<div class="pick-q" style="${on?`background:${fw.color}12;border-color:${fw.color}44`:''}; display:flex;align-items:center">
+          <span class="checkbox-sm" style="${on?`background:${fw.color};border-color:${fw.color}`:''};cursor:pointer" onclick="togglePick('${q.id}')">${on?'✓':''}</span>
+          <span style="line-height:1.55;color:var(--text2);font-size:${fs-1}px;flex:1;cursor:pointer" onclick="togglePick('${q.id}')">${esc(q.text)}</span>
+          <button style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 6px;flex-shrink:0" 
+            onclick="event.stopPropagation();S._pickEditId='${q.id}';render()">✎</button>
+        </div>`;
+      }
     });
     h += '</div></div>';
   });
@@ -1285,6 +1302,26 @@ window.savePickedQs = async () => {
   await saveSettings({ ...S.settings, activeQuestions:aq, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
   showToast("已更新每日問題");
   goCal();
+};
+
+window.savePickQText = async (fwId, qId, newText) => {
+  const text = newText.trim();
+  if (!text) return;
+  // Update in framework
+  const fw = S.fws.find(f=>f.id===fwId);
+  if (fw) {
+    const q = fw.questions.find(q=>q.id===qId);
+    if (q) { q.text = text; await saveFw(fw); }
+  }
+  // Also update in activeQs if selected
+  const aq = S.activeQs.find(q=>q.id===qId);
+  if (aq) {
+    aq.text = text;
+    await saveSettings({ ...S.settings, activeQuestions:S.activeQs, solveFws:S.solveFws, activeSolveFws:S.activeSolveFws });
+  }
+  S._pickEditId = null;
+  showToast("題目已更新");
+  render();
 };
 
 // ─── Settings actions ───
