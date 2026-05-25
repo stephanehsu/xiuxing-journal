@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.9";
+const APP_VERSION = "v0.0.0.11";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -736,9 +736,8 @@ function renderEditor(fs, ff) {
           <label class="q-label" style="font-size:${fs-1}px">
             <span class="q-num">${idx+1}</span>${esc(q.text)}
           </label>
-          <textarea class="q-textarea" style="font-size:${fs}px;font-family:${ff}"
-            placeholder="寫下你的想法…" rows="3"
-            oninput="S.edAns['${q.id}']=this.value">${esc(val)}</textarea>
+          <textarea id="edTa_${q.id}" class="q-textarea" style="font-size:${fs}px;font-family:${ff}"
+            placeholder="寫下你的想法…" rows="3">${esc(val)}</textarea>
           <div class="q-tag-row">`;
         myTags.forEach(t => {
           h += `<span class="q-tag" style="background:${gc(t)}" onclick="rmQTag('${q.id}','${t}')">${esc(t)} ✕</span>`;
@@ -854,6 +853,8 @@ function renderGuidance(fs, ff) {
     }
 
     h += `<button class="add-btn" onclick="runGuidance()">🔄 重新分析</button>`;
+    h += `<button class="save-btn" onclick="saveGuidanceToRef()">💾 儲存引導至反思紀錄</button>`;
+    h += `<button class="add-btn" onclick="copyGuidanceText()">📋 複製引導文字</button>`;
     if (selSfws.length > 0) {
       h += `<p style="font-size:10px;color:var(--text3);text-align:center;margin:6px 0 0">使用解決框架：${selSfws.map(s=>`${s.icon}${s.name}`).join("、")}</p>`;
     }
@@ -1175,18 +1176,27 @@ window.changeMonth = (dir) => {
 };
 
 // ─── Editor actions ───
+window.syncEditorAnswers = () => {
+  S.activeQs.forEach(q => {
+    const ta = document.getElementById('edTa_' + q.id);
+    if (ta) S.edAns[q.id] = ta.value;
+  });
+};
 window.addQTag = (qId, t) => {
+  syncEditorAnswers();
   const c = t.startsWith("#") ? t : `#${t}`;
   if (!S.edQTags[qId]) S.edQTags[qId] = [];
   if (!S.edQTags[qId].includes(c)) S.edQTags[qId].push(c);
   render();
 };
 window.rmQTag = (qId, t) => {
+  syncEditorAnswers();
   if (S.edQTags[qId]) S.edQTags[qId] = S.edQTags[qId].filter(x=>x!==t);
   render();
 };
 
 window.handleSave = async () => {
+  syncEditorAnswers();
   S.edSaving = true; render();
   const hasContent = Object.values(S.edAns).some(v=>v?.trim());
   if (!hasContent) { S.edSaving=false; render(); return; }
@@ -1241,6 +1251,45 @@ window.runGuidance = async () => {
 };
 window.toggleGuideQ = (qId) => {
   S.guideExpanded[qId] = !S.guideExpanded[qId]; render();
+};
+
+window.saveGuidanceToRef = async () => {
+  if (!S.guideReport) return;
+  const ref0 = S.refs[S.selDate];
+  if (ref0) {
+    ref0.guidance = S.guideReport;
+    ref0.guidanceSavedAt = Date.now();
+    await saveRef(S.selDate, ref0);
+    showToast("引導已儲存至反思紀錄 ✓");
+  }
+};
+
+window.copyGuidanceText = () => {
+  if (!S.guideReport) return;
+  const r = S.guideReport;
+  let text = `✦ AI 修行引導 — ${S.selDate}\n\n`;
+  text += `📋 今日總評\n${r.overview?.summary||''}\n`;
+  if (r.overview?.highlights?.length) {
+    text += `\n✨ 亮點\n${r.overview.highlights.map(t=>`• ${t}`).join('\n')}\n`;
+  }
+  if (r.overview?.concerns?.length) {
+    text += `\n⚠ 需留意\n${r.overview.concerns.map(t=>`• ${t}`).join('\n')}\n`;
+  }
+  if (r.perQuestion) {
+    text += `\n📝 逐題引導\n`;
+    const qMap = {};
+    S.activeQs.forEach(q => qMap[q.id] = q);
+    for (const [qId, g] of Object.entries(r.perQuestion)) {
+      const q = qMap[qId];
+      if (!q) continue;
+      text += `\n【${q.text}】\n`;
+      if (g.insight) text += `🔍 觀察：${g.insight}\n`;
+      if (g.dharma) text += `📖 佛法：${g.dharma}\n`;
+      if (g.action) text += `✅ 建議：${g.action}\n`;
+    }
+  }
+  if (r.encouragement) text += `\n🙏 ${r.encouragement}\n`;
+  navigator.clipboard.writeText(text).then(() => showToast("已複製到剪貼簿 ✓")).catch(() => showToast("複製失敗"));
 };
 
 // ─── Framework edit actions ───
