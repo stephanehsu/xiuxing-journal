@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.11";
+const APP_VERSION = "v0.0.0.12";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -742,14 +742,12 @@ function renderEditor(fs, ff) {
         myTags.forEach(t => {
           h += `<span class="q-tag" style="background:${gc(t)}" onclick="rmQTag('${q.id}','${t}')">${esc(t)} ✕</span>`;
         });
-        if (val.trim()) {
-          h += `<select class="q-tag-select" onchange="addQTag('${q.id}',this.value);this.value=''">
+        h += `<select class="q-tag-select" onchange="addQTag('${q.id}',this.value);this.value=''">
             <option value="">+ 標籤</option>`;
-          SUGGEST_TAGS.filter(t=>!myTags.includes(t)).forEach(t => {
-            h += `<option value="${t}">${t}</option>`;
-          });
-          h += '</select>';
-        }
+        SUGGEST_TAGS.filter(t=>!myTags.includes(t)).forEach(t => {
+          h += `<option value="${t}">${t}</option>`;
+        });
+        h += '</select>';
         h += '</div></div>';
       });
     }
@@ -761,7 +759,17 @@ function renderEditor(fs, ff) {
 
   h += `<button class="save-btn" ${S.edSaving?'disabled':''} onclick="handleSave()">
     ${S.edSaving ? (S.edAiLoading ? '✦ AI 分析標籤中…' : '儲存中…') : '儲存反思'}
-  </button></div>`;
+  </button>`;
+
+  // Show link to guidance if exists
+  const hasGuidance = S.refs[S.selDate]?.guidance || false;
+  if (S.refs[S.selDate]) {
+    h += `<button class="add-btn" onclick="goGuidance('${S.selDate}')">
+      ${hasGuidance ? '📖 查看 AI 引導' : '✦ 產生 AI 引導'}
+    </button>`;
+  }
+
+  h += '</div>';
   return h;
 }
 
