@@ -381,7 +381,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.12";
+const APP_VERSION = "v0.0.0.13";
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -503,34 +503,42 @@ async function aiGuidance(answers, questions, solveFwsList) {
   const sfText = solveFwsList.length > 0
     ? `\n\n請特別運用以下解決框架來給予建議：\n${solveFwsList.map(sf=>`- ${sf.name}：${sf.prompt}`).join("\n")}`
     : "";
-  const prompt = `你是一位溫和慈悲的佛法善知識，精通各部經典。以下是一位修行者今日的反省記錄。
+  const prompt = `你是一位深具洞察力的反思引導者，擅長運用多元知識體系幫助人看見盲點。你精通佛學、心理學（認知行為、正念、依附理論等）、哲學（斯多葛、存在主義等）、以及各種實證的自我成長方法。
 
-請提供修行引導，嚴格按照以下 JSON 格式回傳，不要加任何其他文字：
+你的核心原則：
+1. 不要只是理解或重複對方說的話，要幫對方看見他自己還沒看見的東西
+2. 指出矛盾、模式、盲點 — 溫和但直接
+3. 問出讓人停下來思考的問題
+4. 只在佛法確實最貼切時才引用佛法，否則用最適合的知識體系
+5. 建議要非常具體、明天就能做，不是抽象的道理
+
+嚴格按照以下 JSON 格式回傳，不要加任何其他文字：
 
 {
   "overview": {
-    "summary": "今日修行整體評語（2-3句）",
-    "highlights": ["亮點1", "亮點2"],
-    "concerns": ["需留意之處1", "需留意之處2"]
+    "summary": "今日整體觀察，指出核心模式或盲點（2-3句，要有洞見，不要只是摘要）",
+    "highlights": ["做得好的地方1", "做得好的地方2"],
+    "blindspots": ["你可能沒注意到的1", "你可能沒注意到的2"]
   },
   "perQuestion": {
     "問題ID": {
-      "insight": "針對這題回答的觀察與分析（1-2句）",
-      "dharma": "相關佛法觀點或經典引用（1句）",
-      "action": "具體可執行的建議（1-2句）"
+      "insight": "深層觀察 — 不重複對方的話，而是指出背後的模式、矛盾或未覺察之處（2-3句）",
+      "perspective": "從最適合的知識體系提供觀點（心理學/佛學/哲學/其他），標明來源（1-2句）",
+      "challenge": "一個引發deeper thinking的問題（1句）",
+      "action": "具體可執行的建議，明天就能做（1-2句）"
     }
   },
-  "encouragement": "溫暖的鼓勵語（1-2句）"
+  "encouragement": "溫暖但不敷衍的鼓勵語，點出成長的方向（1-2句）"
 }
 
 注意：
 - perQuestion 的 key 必須是問題 ID（如 dz1, ys3）
-- 語氣溫和鼓勵，像善知識而非批判者
-- 佛法觀點要引用具體經典名稱
-- 行動建議要非常具體、明日即可執行
+- insight 是最重要的欄位，要有真正的洞見，不是換句話重述
+- perspective 要標明知識來源，例如「認知行為治療的角度來看…」「《中觀》的空性觀…」「斯多葛哲學的二分法…」
+- challenge 要問出讓人不舒服但有價值的問題
 - 所有字串值中不要使用換行符號${sfText}
 
-修行者的反省記錄：
+反省記錄：
 
 ${qList}`;
   try {
@@ -817,9 +825,10 @@ function renderGuidance(fs, ff) {
       });
       h += '</div>';
     }
-    if (r.overview?.concerns?.length) {
-      h += '<div class="guide-section"><span class="guide-section-label">⚠ 需留意</span>';
-      r.overview.concerns.forEach(t => {
+    if (r.overview?.concerns?.length || r.overview?.blindspots?.length) {
+      const items = r.overview?.blindspots || r.overview?.concerns || [];
+      h += '<div class="guide-section"><span class="guide-section-label">🔍 盲點與覺察</span>';
+      items.forEach(t => {
         h += `<div class="guide-item"><span class="guide-bullet" style="color:#c0392b">•</span><span style="font-size:${fs-1}px">${esc(t)}</span></div>`;
       });
       h += '</div>';
@@ -843,8 +852,10 @@ function renderGuidance(fs, ff) {
           </button>`;
         if (isOpen) {
           h += '<div class="guide-acc-body">';
-          if (g.insight) h += `<div class="guide-row"><span class="guide-row-icon">🔍</span><div><span class="guide-row-label">觀察</span><p class="guide-row-text" style="font-size:${fs-1}px">${esc(g.insight)}</p></div></div>`;
+          if (g.insight) h += `<div class="guide-row"><span class="guide-row-icon">🔍</span><div><span class="guide-row-label">深層觀察</span><p class="guide-row-text" style="font-size:${fs-1}px">${esc(g.insight)}</p></div></div>`;
+          if (g.perspective) h += `<div class="guide-row"><span class="guide-row-icon">💡</span><div><span class="guide-row-label">觀點</span><p class="guide-row-text" style="font-size:${fs-1}px;color:var(--gold);font-style:italic">${esc(g.perspective)}</p></div></div>`;
           if (g.dharma) h += `<div class="guide-row"><span class="guide-row-icon">📖</span><div><span class="guide-row-label">佛法觀點</span><p class="guide-row-text" style="font-size:${fs-1}px;color:var(--gold);font-style:italic">${esc(g.dharma)}</p></div></div>`;
+          if (g.challenge) h += `<div class="guide-row"><span class="guide-row-icon">❓</span><div><span class="guide-row-label">反思提問</span><p class="guide-row-text" style="font-size:${fs-1}px;font-weight:600">${esc(g.challenge)}</p></div></div>`;
           if (g.action) h += `<div class="guide-row"><span class="guide-row-icon">✅</span><div><span class="guide-row-label">具體建議</span><p class="guide-row-text" style="font-size:${fs-1}px">${esc(g.action)}</p></div></div>`;
           h += '</div>';
         }
@@ -1280,7 +1291,9 @@ window.copyGuidanceText = () => {
   if (r.overview?.highlights?.length) {
     text += `\n✨ 亮點\n${r.overview.highlights.map(t=>`• ${t}`).join('\n')}\n`;
   }
-  if (r.overview?.concerns?.length) {
+  if (r.overview?.blindspots?.length) {
+    text += `\n🔍 盲點與覺察\n${r.overview.blindspots.map(t=>`• ${t}`).join('\n')}\n`;
+  } else if (r.overview?.concerns?.length) {
     text += `\n⚠ 需留意\n${r.overview.concerns.map(t=>`• ${t}`).join('\n')}\n`;
   }
   if (r.perQuestion) {
@@ -1291,8 +1304,10 @@ window.copyGuidanceText = () => {
       const q = qMap[qId];
       if (!q) continue;
       text += `\n【${q.text}】\n`;
-      if (g.insight) text += `🔍 觀察：${g.insight}\n`;
-      if (g.dharma) text += `📖 佛法：${g.dharma}\n`;
+      if (g.insight) text += `🔍 深層觀察：${g.insight}\n`;
+      if (g.perspective) text += `💡 觀點：${g.perspective}\n`;
+      if (g.dharma) text += `📖 佛法觀點：${g.dharma}\n`;
+      if (g.challenge) text += `❓ 反思提問：${g.challenge}\n`;
       if (g.action) text += `✅ 建議：${g.action}\n`;
     }
   }
