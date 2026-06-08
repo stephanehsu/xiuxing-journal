@@ -412,7 +412,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.16";
+const APP_VERSION = "v0.0.0.17";
 
 // ─── Professional Knowledge Frameworks (auto-matched by AI) ───
 const PRO_FRAMEWORKS = [
@@ -1563,16 +1563,43 @@ window.runGuidance = async () => {
 window.goChat = (dateKey) => {
   S.selDate = dateKey;
   S.view = "chat"; S.subView = null;
-  S.chatQIdx = 0; S.chatHistory = []; S.chatLoading = false;
-  S.chatPhase = "answer"; S.chatSummary = null;
-  // Show first question
-  if (S.activeQs.length > 0) {
-    const q = S.activeQs[0];
-    S.chatHistory.push({ type:"question", qId:q.id, text:q.text, num:1 });
+  S.chatLoading = false;
+  const existing = S.refs[dateKey];
+  if (existing?.chatHistory?.length) {
+    // Resume previous conversation
+    S.chatHistory = JSON.parse(JSON.stringify(existing.chatHistory));
+    S.chatSummary = existing.guidance || null;
+    // Determine current question index from last question card
+    const qCards = S.chatHistory.filter(m => m.type === 'question');
+    S.chatQIdx = qCards.length > 0 ? (qCards[qCards.length-1].num - 1) : 0;
+    if (S.chatSummary) S.chatQIdx = S.activeQs.length; // already done
+    S.chatPhase = "dialogue";
+  } else {
+    S.chatQIdx = 0; S.chatHistory = []; S.chatSummary = null;
+    S.chatPhase = "answer";
+    if (S.activeQs.length > 0) {
+      const q = S.activeQs[0];
+      S.chatHistory.push({ type:"question", qId:q.id, text:q.text, num:1 });
+    }
   }
   render();
   scrollChatBottom();
 };
+
+// Auto-save chat progress silently
+async function autoSaveChat() {
+  try {
+    const data = stripUndefined({
+      answers: S.edAns, qTags: S.edQTags, tags: [],
+      chatHistory: S.chatHistory, guidance: S.chatSummary,
+      updatedAt: Date.now(),
+      createdAt: S.refs[S.selDate]?.createdAt || Date.now(),
+      exported: false,
+    });
+    await saveRef(S.selDate, data);
+    S.refs[S.selDate] = data;
+  } catch(e) { console.error("Auto-save error:", e); }
+}
 
 window.sendChat = async () => {
   const inp = document.getElementById('chatInput');
@@ -1604,11 +1631,11 @@ window.sendChat = async () => {
   if (result) {
     S.chatHistory.push({
       role:"ai", qId:curQ.id,
-      observation: result.reply,
-      framework: result.framework === "null" || !result.framework ? null : result.framework,
-      pattern: result.pattern === "null" || !result.pattern ? null : result.pattern,
+      observation: result.reply || "",
+      framework: (result.framework && result.framework !== "null") ? result.framework : null,
+      pattern: (result.pattern && result.pattern !== "null") ? result.pattern : null,
       done: result.done === true,
-      closing: result.closing === "null" ? null : result.closing,
+      closing: (result.closing && result.closing !== "null") ? result.closing : null,
     });
     if (result.done === true) {
       S.chatPhase = "topicDone"; // topic wrapped up, offer next question
@@ -1619,6 +1646,7 @@ window.sendChat = async () => {
     S.chatPhase = "dialogue";
   }
 
+  autoSaveChat();
   render();
   scrollChatBottom();
 };
@@ -1646,30 +1674,51 @@ window.generateChatSummary = async () => {
   if (result) {
     S.chatSummary = result;
     S.guideReport = result;
-    await saveGuidance(S.selDate, result);
+    await saveGuidance(S.selDate, stripUndefined(result));
+    await autoSaveChat();
+    showToast("分析報告已生成並儲存 ✓");
+  } else {
+    showToast("分析未成功，請重試");
   }
   render();
   scrollChatBottom();
 };
 
 window.saveChatResult = async () => {
-  // Save all answers and AI report
-  const tags = [];
-  const data = {
-    answers: S.edAns,
-    qTags: S.edQTags,
-    tags,
-    chatHistory: S.chatHistory,
-    guidance: S.chatSummary,
-    updatedAt: Date.now(),
-    createdAt: S.refs[S.selDate]?.createdAt || Date.now(),
-    exported: false,
-  };
-  await saveRef(S.selDate, data);
-  S.refs[S.selDate] = data;
-  if (S.chatSummary) await saveGuidance(S.selDate, S.chatSummary);
-  showToast("反思已儲存 ✓");
+  try {
+    const data = stripUndefined({
+      answers: S.edAns,
+      qTags: S.edQTags,
+      tags: [],
+      chatHistory: S.chatHistory,
+      guidance: S.chatSummary,
+      updatedAt: Date.now(),
+      createdAt: S.refs[S.selDate]?.createdAt || Date.now(),
+      exported: false,
+    });
+    await saveRef(S.selDate, data);
+    S.refs[S.selDate] = data;
+    if (S.chatSummary) await saveGuidance(S.selDate, stripUndefined(S.chatSummary));
+    showToast("反思已儲存 ✓");
+  } catch(e) {
+    console.error("Save chat error:", e);
+    showToast("儲存失敗：" + (e.message || e));
+  }
 };
+
+// Recursively remove undefined values (Firestore rejects them)
+function stripUndefined(obj) {
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v === undefined) continue;
+      out[k] = stripUndefined(v);
+    }
+    return out;
+  }
+  return obj;
+}
 
 function scrollChatBottom() {
   setTimeout(() => {
