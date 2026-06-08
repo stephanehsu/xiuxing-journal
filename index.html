@@ -399,7 +399,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.14";
+const APP_VERSION = "v0.0.0.15";
 
 // ─── Professional Knowledge Frameworks (auto-matched by AI) ───
 const PRO_FRAMEWORKS = [
@@ -600,30 +600,39 @@ ${qList}`;
 }
 
 // ─── AI Chat Follow-up ───
-async function aiChatFollowup(question, userAnswer, chatHistory, recentContext) {
-  const historyText = chatHistory.map(m => `${m.role==="user"?"使用者":"引導者"}：${m.text}`).join("\n");
+async function aiChatFollowup(question, qHistory, recentContext, turnCount) {
+  // qHistory: full back-and-forth for this question [{role, text/observation/followup}]
+  const historyText = qHistory.map(m => {
+    if (m.role === "user") return `對方：${m.text}`;
+    return `你：${m.observation||''}${m.followup?' '+m.followup:''}`;
+  }).join("\n");
   const fwBrief = PRO_FRAMEWORKS.map(f=>`${f.name}(${f.brief})`).join("；");
-  const prompt = `你是一位專業的反思引導者。使用者正在回答每日自省問題。
+  const prompt = `你是一位資深的心理諮商師，正在與來談者進行一對一的反思對話。你的風格溫和、好奇、不評判，但很會問問題——你總能順著對方的話，問出讓他停下來思考的下一個問題。
 
 可運用的知識體系：${fwBrief}
 
-目前的自省問題是：「${question}」
-使用者的回答：「${userAnswer}」
-${historyText ? `\n之前的對話：\n${historyText}` : ''}
-${recentContext ? `\n近期反思背景（供辨識模式用）：\n${recentContext}` : ''}
+此刻探討的反思主題：「${question}」
 
-你的任務：
-1. 不要只是重述使用者說的話，要挖掘更深
-2. 指出使用者可能沒注意到的盲點、矛盾或模式
-3. 問一個有力的追問，幫助使用者看得更深
-4. 如果近期有重複模式，直接點出
+到目前為止你們的對話：
+${historyText}
+${recentContext ? `\n（背景參考，對方近期的反思紀錄，可用於辨識模式）：\n${recentContext}\n` : ''}
+
+這是這個主題的第 ${turnCount} 輪對話。請像真正的諮商師那樣回應：
+
+1. 先簡短回應對方剛說的（不是重述，是接住、是反映你聽到的深層情緒或矛盾）
+2. 順著對方的話，問下一個問題——要具體、要順著他的脈絡，不要跳tone
+3. 諮商師不會急著給答案或建議，而是讓對方自己挖出來
+4. 判斷這個主題是否已經談得夠深：
+   - 如果對方還有東西可以挖（情緒沒說完、矛盾沒釐清、根源沒觸及），繼續問（done=false）
+   - 如果這個主題已經談到一個段落、對方有了新的覺察，可以收尾（done=true），給一個溫暖的小結
 
 回傳 JSON，不要加其他文字：
 {
-  "observation": "你對使用者回答的深層觀察（1-2句，不要重複使用者的話）",
-  "followup": "一個有力的追問（1句，要讓人停下來想的問題）",
-  "framework": "你運用了什麼知識體系，簡短說明（例：認知行為治療的角度）",
-  "pattern": "如果發現跨天重複的模式就指出，沒有就填 null"
+  "reply": "你的回應，像真人說話那樣自然（2-4句，包含反映 + 追問）",
+  "framework": "如果有運用特定知識體系，簡短標明（例：依附理論的角度），沒有就填 null",
+  "pattern": "如果發現與近期紀錄重複的模式就點出，沒有填 null",
+  "done": false,
+  "closing": "若 done=true，給這個主題一句溫暖的小結與洞見；done=false 則填 null"
 }`;
   try {
     const text = await callGemini(prompt, 800);
@@ -1195,10 +1204,9 @@ function renderChat(fs, ff) {
     } else if (m.role === 'ai') {
       h += `<div class="chat-bubble ai">`;
       if (m.observation) h += `<div>${esc(m.observation)}</div>`;
-      if (m.followup) h += `<div style="margin-top:6px;font-weight:600;color:var(--gold)">❓ ${esc(m.followup)}</div>`;
       if (m.framework) h += `<span class="chat-fw-tag">💡 ${esc(m.framework)}</span>`;
-      if (m.pattern) h += `<div class="chat-pattern-card" style="margin-top:6px">🔄 模式辨識：${esc(m.pattern)}</div>`;
-      if (m.text && !m.observation) h += `<div>${esc(m.text)}</div>`;
+      if (m.pattern) h += `<div class="chat-pattern-card" style="margin-top:6px">🔄 ${esc(m.pattern)}</div>`;
+      if (m.done && m.closing) h += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-style:italic;color:var(--gold)">✓ ${esc(m.closing)}</div>`;
       h += '</div>';
     }
   });
@@ -1214,19 +1222,31 @@ function renderChat(fs, ff) {
 
   // Input area
   if (!isDone) {
-    if (curQ && S.chatHistory.length === 0 || (S.chatHistory.length > 0 && S.chatHistory[S.chatHistory.length-1].type !== 'question' || S.chatHistory[S.chatHistory.length-1].qId !== curQ?.id)) {
-      // Question card not yet shown — will be added on render via startChatQ
+    const topicDone = S.chatPhase === 'topicDone';
+    if (topicDone) {
+      // Topic wrapped up — offer to continue or move on
+      h += `<div style="display:flex;flex-direction:column;gap:8px;padding:8px 0">
+        <p style="font-size:12px;color:var(--text3);text-align:center">這個主題談得差不多了，你可以繼續補充，或進入下一題</p>
+        <div class="chat-input-row" style="position:static">
+          <textarea id="chatInput" rows="1" placeholder="想再補充什麼…"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"
+            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+          <button class="chat-send-btn" onclick="sendChat()" ${S.chatLoading?'disabled':''}>➤</button>
+        </div>
+        <button class="save-btn" style="margin:0" onclick="chatNextQ()">${S.chatQIdx+1 >= total ? '完成所有問題 →' : '下一題 →'}</button>
+      </div>`;
+    } else {
+      const isFirstTurn = S.chatPhase === 'answer';
+      h += `<div class="chat-input-row">
+        <textarea id="chatInput" rows="1" placeholder="${isFirstTurn?'寫下你的想法…':'繼續說…'}"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"
+          oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+        <button class="chat-send-btn" onclick="sendChat()" ${S.chatLoading?'disabled':''}>➤</button>
+      </div>
+      <div style="display:flex;gap:8px;padding:2px 0;justify-content:flex-end">
+        <button class="chat-skip-btn" onclick="chatNextQ()">${S.chatQIdx+1 >= total ? '結束對話 →' : '進入下一題 →'}</button>
+      </div>`;
     }
-    h += `<div class="chat-input-row">
-      <textarea id="chatInput" rows="1" placeholder="${S.chatPhase==='followup'?'回答追問，或點跳過進入下一題…':'寫下你的反思…'}"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"
-        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
-      <button class="chat-send-btn" onclick="sendChat()" ${S.chatLoading?'disabled':''}>➤</button>
-    </div>
-    <div style="display:flex;gap:8px;padding:2px 0">
-      ${S.chatPhase==='followup'?`<button class="chat-skip-btn" onclick="chatNextQ()">跳過追問 →</button>`:''}
-      <button class="chat-skip-btn" onclick="chatSkipQ()">跳過此題 →</button>
-    </div>`;
   } else {
     // Done - show summary
     if (S.chatSummary) {
@@ -1235,10 +1255,13 @@ function renderChat(fs, ff) {
         <button class="add-btn" onclick="goGuidance('${S.selDate}')">📖 查看完整引導報告</button>
       </div>`;
     } else if (S.chatLoading) {
-      // generating summary
+      h += `<div style="text-align:center;padding:20px 0">
+        <div class="load-spin"></div>
+        <p style="font-size:12px;color:var(--gold);margin-top:8px">正在整理深度分析…</p>
+      </div>`;
     } else {
       h += `<div style="text-align:center;padding:20px 0">
-        <p style="font-size:14px;color:var(--gold);font-weight:600">✦ 所有問題已完成</p>
+        <p style="font-size:14px;color:var(--gold);font-weight:600">✦ 對話完成</p>
         <button class="save-btn" style="margin-top:10px" onclick="generateChatSummary()">產生深度分析報告</button>
       </div>`;
     }
@@ -1549,7 +1572,7 @@ window.sendChat = async () => {
 
   // Save user message
   S.chatHistory.push({ role:"user", text, qId:curQ.id });
-  // Save answer to edAns
+  // Accumulate answer to edAns
   if (!S.edAns[curQ.id]) S.edAns[curQ.id] = text;
   else S.edAns[curQ.id] += "\n" + text;
 
@@ -1557,26 +1580,30 @@ window.sendChat = async () => {
   render();
   scrollChatBottom();
 
-  // AI follow-up
+  // Count turns for this question + build history
+  const qHistory = S.chatHistory.filter(m => m.qId === curQ.id && (m.role==="user"||m.role==="ai"));
+  const turnCount = qHistory.filter(m => m.role === "user").length;
   const recentCtx = getRecentContext(7);
-  const qHistory = S.chatHistory.filter(m => m.qId === curQ.id && m.role);
-  const result = await aiChatFollowup(curQ.text, text, qHistory, recentCtx);
+  const result = await aiChatFollowup(curQ.text, qHistory, recentCtx, turnCount);
 
   S.chatLoading = false;
 
   if (result) {
     S.chatHistory.push({
       role:"ai", qId:curQ.id,
-      observation: result.observation,
-      followup: result.followup,
-      framework: result.framework,
+      observation: result.reply,
+      framework: result.framework === "null" || !result.framework ? null : result.framework,
       pattern: result.pattern === "null" || !result.pattern ? null : result.pattern,
+      done: result.done === true,
+      closing: result.closing === "null" ? null : result.closing,
     });
-    S.chatPhase = "followup";
+    if (result.done === true) {
+      S.chatPhase = "topicDone"; // topic wrapped up, offer next question
+    } else {
+      S.chatPhase = "dialogue"; // keep talking
+    }
   } else {
-    // AI failed, move on
-    chatNextQ();
-    return;
+    S.chatPhase = "dialogue";
   }
 
   render();
