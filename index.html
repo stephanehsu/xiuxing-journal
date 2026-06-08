@@ -308,16 +308,29 @@ function getGeminiKey() { return S.settings.geminiKey || DEFAULT_GEMINI_KEY; }
 function getGeminiModel() { return S.settings.geminiModel || DEFAULT_GEMINI_MODEL; }
 
 async function callGemini(prompt, maxTokens = 500) {
+  const model = getGeminiModel();
+  const genConfig = { temperature: 0.3, maxOutputTokens: maxTokens };
+  // For 2.5+/3.x models, thinking tokens count against the output budget.
+  // Limit thinking so the actual answer isn't starved/truncated.
+  if (/gemini-(2\.5|3)/.test(model)) {
+    genConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
   const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${getGeminiModel()}:generateContent?key=${getGeminiKey()}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getGeminiKey()}`,
     { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: maxTokens },
+        generationConfig: genConfig,
       }) }
   );
   const data = await resp.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  const cand = data?.candidates?.[0];
+  // Collect all text parts (sometimes split across multiple parts)
+  const txt = (cand?.content?.parts || []).map(p => p.text || "").join("");
+  if (cand?.finishReason === "MAX_TOKENS") {
+    console.warn("Gemini hit MAX_TOKENS, response may be truncated");
+  }
+  return txt;
 }
 
 // ─── Constants ───
@@ -399,7 +412,7 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.15";
+const APP_VERSION = "v0.0.0.16";
 
 // ─── Professional Knowledge Frameworks (auto-matched by AI) ───
 const PRO_FRAMEWORKS = [
@@ -635,7 +648,7 @@ ${recentContext ? `\n（背景參考，對方近期的反思紀錄，可用於�
   "closing": "若 done=true，給這個主題一句溫暖的小結與洞見；done=false 則填 null"
 }`;
   try {
-    const text = await callGemini(prompt, 800);
+    const text = await callGemini(prompt, 1500);
     return tryParseJSON(text);
   } catch(e) { console.error("Chat followup error:", e); }
   return null;
