@@ -255,6 +255,24 @@ textarea { resize: vertical; }
 /* View transitions */
 .view { display: none; }
 .view.active { display: block; }
+
+/* Chat UI */
+.chat-messages { display:flex; flex-direction:column; gap:8px; padding:4px 0; }
+.chat-bubble { max-width:88%; padding:10px 14px; border-radius:14px; font-size:13px; line-height:1.65; word-break:break-word; }
+.chat-bubble.ai { align-self:flex-start; background:#fff; border:1px solid var(--border); border-bottom-left-radius:4px; }
+.chat-bubble.user { align-self:flex-end; background:var(--bar); color:var(--barText); border-bottom-right-radius:4px; }
+.chat-bubble .chat-meta { font-size:10px; opacity:.5; margin-top:4px; }
+.chat-bubble .chat-fw-tag { display:inline-block; font-size:10px; background:rgba(138,114,48,0.15); color:var(--gold); padding:1px 6px; border-radius:8px; margin-top:4px; }
+.chat-question-card { background:rgba(138,114,48,0.08); border:1px solid rgba(138,114,48,0.2); border-radius:12px; padding:12px 14px; margin:6px 0; }
+.chat-question-card .chat-q-num { font-size:11px; color:var(--gold); font-weight:700; }
+.chat-question-card .chat-q-text { font-size:13px; color:var(--text); margin-top:4px; line-height:1.5; }
+.chat-input-row { display:flex; gap:8px; align-items:flex-end; padding:8px 0; position:sticky; bottom:0; background:var(--bg1); }
+.chat-input-row textarea { flex:1; background:#fff; border:1px solid var(--border); border-radius:14px; padding:10px 14px; font-size:13px; line-height:1.5; resize:none; outline:none; min-height:42px; max-height:120px; }
+.chat-input-row textarea:focus { border-color:var(--gold); }
+.chat-send-btn { background:var(--bar); color:var(--barText); border:none; border-radius:50%; width:42px; height:42px; font-size:16px; flex-shrink:0; }
+.chat-send-btn:disabled { opacity:.3; }
+.chat-skip-btn { background:none; border:1px solid var(--border); border-radius:10px; padding:6px 14px; font-size:12px; color:var(--text3); }
+.chat-pattern-card { background:rgba(87,117,144,0.08); border:1px solid rgba(87,117,144,0.2); border-radius:10px; padding:10px 12px; margin:4px 0; font-size:12px; color:#577590; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -381,7 +399,31 @@ const PRESET_SOLVE_FWS = [
 ];
 
 // ─── Version ───
-const APP_VERSION = "v0.0.0.13";
+const APP_VERSION = "v0.0.0.14";
+
+// ─── Professional Knowledge Frameworks (auto-matched by AI) ───
+const PRO_FRAMEWORKS = [
+  { id:"cbt", name:"認知行為", tags:["思維", "信念", "焦慮", "憂鬱", "自動化思考"],
+    brief:"辨識認知扭曲與自動化思考，用行為實驗驗證信念" },
+  { id:"act", name:"接納承諾", tags:["逃避", "價值", "意義", "接納", "彈性"],
+    brief:"心理彈性六角模型：接納、脫鉤、當下、觀察自我、價值、承諾行動" },
+  { id:"nvc", name:"非暴力溝通", tags:["衝突", "溝通", "關係", "情緒", "需要"],
+    brief:"觀察→感受→需要→請求，不帶評判地表達" },
+  { id:"stoic", name:"斯多葛哲學", tags:["控制", "接受", "韌性", "逆境", "責任"],
+    brief:"控制二分法：區分可控與不可控，專注可控的行動" },
+  { id:"mindfulness", name:"正念覺察", tags:["覺察", "專注", "當下", "禪修", "身體"],
+    brief:"四念處：觀身、觀受、觀心、觀法，不判斷地覺察" },
+  { id:"attachment", name:"依附理論", tags:["關係", "安全感", "親密", "信任", "童年"],
+    brief:"安全/焦慮/逃避依附模式如何影響關係互動" },
+  { id:"gestalt", name:"完形治療", tags:["未完成", "覺察", "當下", "整合", "對話"],
+    brief:"覺察此時此刻的感受，完成未竟事務" },
+  { id:"existential", name:"存在主義", tags:["意義", "自由", "責任", "孤獨", "死亡"],
+    brief:"面對存在的焦慮，在有限中創造意義" },
+  { id:"buddhist", name:"佛法智慧", tags:["因果", "無常", "慈悲", "布施", "持戒", "定課"],
+    brief:"四聖諦、八正道、因果業力、慈悲喜捨" },
+  { id:"solution", name:"焦點解決", tags:["目標", "例外", "資源", "小步驟", "改變"],
+    brief:"聚焦在已經有效的部分，找出例外經驗，擴大成功" },
+];
 
 // ─── Helpers ───
 function gc(t) { return TAG_COLORS[t.replace("#","")] || TAG_COLORS.default; }
@@ -496,14 +538,20 @@ ${qList}`;
   return {};
 }
 
-async function aiGuidance(answers, questions, solveFwsList) {
+async function aiGuidance(answers, questions, solveFwsList, recentContext) {
   const answered = questions.filter(q => answers[q.id]?.trim());
   if (!answered.length) return null;
   const qList = answered.map(q=>`[${q.id}] 問：${q.text}\n答：${answers[q.id]}`).join("\n\n");
   const sfText = solveFwsList.length > 0
     ? `\n\n請特別運用以下解決框架來給予建議：\n${solveFwsList.map(sf=>`- ${sf.name}：${sf.prompt}`).join("\n")}`
     : "";
-  const prompt = `你是一位深具洞察力的反思引導者，擅長運用多元知識體系幫助人看見盲點。你精通佛學、心理學（認知行為、正念、依附理論等）、哲學（斯多葛、存在主義等）、以及各種實證的自我成長方法。
+  const fwBrief = PRO_FRAMEWORKS.map(f=>`${f.name}(${f.brief})`).join("；");
+  const recentBlock = recentContext
+    ? `\n\n近期反思紀錄（用於辨識跨天模式）：\n${recentContext}`
+    : "";
+  const prompt = `你是一位深具洞察力的反思引導者，擅長運用多元知識體系幫助人看見盲點。
+
+可運用的知識體系：${fwBrief}
 
 你的核心原則：
 1. 不要只是理解或重複對方說的話，要幫對方看見他自己還沒看見的東西
@@ -536,7 +584,8 @@ async function aiGuidance(answers, questions, solveFwsList) {
 - insight 是最重要的欄位，要有真正的洞見，不是換句話重述
 - perspective 要標明知識來源，例如「認知行為治療的角度來看…」「《中觀》的空性觀…」「斯多葛哲學的二分法…」
 - challenge 要問出讓人不舒服但有價值的問題
-- 所有字串值中不要使用換行符號${sfText}
+- 如果有近期紀錄，務必辨識跨天的重複模式並在 overview 中指出
+- 所有字串值中不要使用換行符號${sfText}${recentBlock}
 
 反省記錄：
 
@@ -550,9 +599,103 @@ ${qList}`;
   return null;
 }
 
-// ═══════════════════════════════════════
-// App State
-// ═══════════════════════════════════════
+// ─── AI Chat Follow-up ───
+async function aiChatFollowup(question, userAnswer, chatHistory, recentContext) {
+  const historyText = chatHistory.map(m => `${m.role==="user"?"使用者":"引導者"}：${m.text}`).join("\n");
+  const fwBrief = PRO_FRAMEWORKS.map(f=>`${f.name}(${f.brief})`).join("；");
+  const prompt = `你是一位專業的反思引導者。使用者正在回答每日自省問題。
+
+可運用的知識體系：${fwBrief}
+
+目前的自省問題是：「${question}」
+使用者的回答：「${userAnswer}」
+${historyText ? `\n之前的對話：\n${historyText}` : ''}
+${recentContext ? `\n近期反思背景（供辨識模式用）：\n${recentContext}` : ''}
+
+你的任務：
+1. 不要只是重述使用者說的話，要挖掘更深
+2. 指出使用者可能沒注意到的盲點、矛盾或模式
+3. 問一個有力的追問，幫助使用者看得更深
+4. 如果近期有重複模式，直接點出
+
+回傳 JSON，不要加其他文字：
+{
+  "observation": "你對使用者回答的深層觀察（1-2句，不要重複使用者的話）",
+  "followup": "一個有力的追問（1句，要讓人停下來想的問題）",
+  "framework": "你運用了什麼知識體系，簡短說明（例：認知行為治療的角度）",
+  "pattern": "如果發現跨天重複的模式就指出，沒有就填 null"
+}`;
+  try {
+    const text = await callGemini(prompt, 800);
+    return tryParseJSON(text);
+  } catch(e) { console.error("Chat followup error:", e); }
+  return null;
+}
+
+// ─── AI Chat Summary (after all questions done) ───
+async function aiChatSummary(chatHistory, questions, recentContext) {
+  const fullChat = chatHistory.map(m => {
+    const prefix = m.role==="user" ? "使用者" : "引導者";
+    const qLabel = m.qId ? `[${m.qId}]` : "";
+    return `${prefix}${qLabel}：${m.text}`;
+  }).join("\n");
+  const fwBrief = PRO_FRAMEWORKS.map(f=>`${f.name}(${f.brief})`).join("；");
+  const prompt = `你是一位專業的反思引導者。以下是使用者今天完整的引導式對話紀錄。
+
+可運用的知識體系：${fwBrief}
+
+${recentContext ? `近期反思背景（用於模式辨識）：\n${recentContext}\n\n` : ''}
+今日完整對話：
+${fullChat}
+
+請產生深度總結報告，嚴格按照 JSON 格式回傳：
+{
+  "overview": {
+    "summary": "今日核心洞見（2-3句，必須有真正的深度觀察，不只是摘要）",
+    "highlights": ["做得好的地方1", "做得好的地方2"],
+    "blindspots": ["盲點1", "盲點2"],
+    "patterns": ["跨天重複模式1（如有）", "與近期相關的模式2（如有）"]
+  },
+  "perQuestion": {
+    "問題ID": {
+      "insight": "這題的深層觀察（2句）",
+      "perspective": "最適合的知識體系觀點，標明來源（1-2句）",
+      "challenge": "進一步的反思提問（1句）",
+      "action": "具體可執行建議（1-2句）"
+    }
+  },
+  "weeklyTheme": "如果從近期模式看，這一週的核心主題是什麼（1句，沒有足夠資料就填 null）",
+  "encouragement": "溫暖但不敷衍的鼓勵（1-2句）"
+}
+
+注意：所有字串值不要使用換行符號。patterns 如果沒有跨天資料就留空陣列。`;
+  try {
+    const text = await callGemini(prompt, 4000);
+    return tryParseJSON(text);
+  } catch(e) { console.error("Chat summary error:", e); }
+  return null;
+}
+
+// ─── Get recent reflections context for pattern recognition ───
+function getRecentContext(days = 7) {
+  const today = new Date();
+  const entries = [];
+  for (let i = 1; i <= days; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const k = dk(d);
+    const ref = S.refs[k];
+    if (!ref?.answers) continue;
+    const answered = Object.entries(ref.answers)
+      .filter(([,v]) => v?.trim())
+      .map(([qId, v]) => {
+        const q = S.activeQs.find(q=>q.id===qId);
+        return `${q?.text||qId}：${v.slice(0,100)}`;
+      }).join("；");
+    if (answered) entries.push(`[${k}] ${answered}`);
+  }
+  if (entries.length === 0) return "";
+  return entries.join("\n");
+}
 const S = {
   view: "calendar", subView: null,
   curMonth: new Date(), selDate: todayK(),
@@ -565,6 +708,13 @@ const S = {
   edAns: {}, edQTags: {}, edSaving: false, edAiLoading: false,
   // Guidance state
   guideReport: null, guideLoading: false, guideError: null, guideExpanded: {},
+  // Chat (引導式對話) state
+  chatQIdx: 0,        // current question index in activeQs
+  chatHistory: [],     // [{role:"user"|"ai", text, qId}]
+  chatInput: "",
+  chatLoading: false,
+  chatPhase: "answer", // "answer" = waiting for user answer, "followup" = AI asked followup
+  chatSummary: null,   // final summary after chat ends
   // FwEdit state
   feName: "", feIcon: "📿", feColor: "#C9A96E", feQs: [], feNewQ: "",
   // SolveFw edit state
@@ -617,6 +767,7 @@ function render() {
   else if (S.view === "fw" && S.subView === "pick") html += renderQnPicker(fs);
   else if (S.view === "settings") html += renderSettingsView(fs, ff);
   else if (S.view === "solveFwEdit") html += renderSolveFwEdit(fs);
+  else if (S.view === "chat") html += renderChat(fs, ff);
 
   html += '</div>';
 
@@ -777,6 +928,11 @@ function renderEditor(fs, ff) {
     </button>`;
   }
 
+  // Guided reflection chat
+  h += `<button class="add-btn" style="border-color:var(--gold);color:var(--gold)" onclick="goChat('${S.selDate}')">
+    💬 引導式反思對話
+  </button>`;
+
   h += '</div>';
   return h;
 }
@@ -834,6 +990,21 @@ function renderGuidance(fs, ff) {
       h += '</div>';
     }
     h += '</div>';
+
+    // Patterns
+    if (r.overview?.patterns?.length) {
+      h += '<div class="guide-section"><span class="guide-section-label">🔄 跨天模式</span>';
+      r.overview.patterns.forEach(t => {
+        h += `<div class="guide-item"><span class="guide-bullet" style="color:#577590">•</span><span style="font-size:${fs-1}px">${esc(t)}</span></div>`;
+      });
+      h += '</div>';
+    }
+    if (r.weeklyTheme && r.weeklyTheme !== 'null') {
+      h += `<div style="background:rgba(87,117,144,0.08);border-radius:8px;padding:10px 12px;margin-top:4px">
+        <span style="font-size:11px;color:#577590;font-weight:600">📊 本週主題：</span>
+        <span style="font-size:12px;color:var(--text)">${esc(r.weeklyTheme)}</span>
+      </div>`;
+    }
 
     // Per-question
     if (r.perQuestion) {
@@ -992,6 +1163,88 @@ function renderQnPicker(fs) {
       <button class="save-btn" style="flex:1;margin:0" onclick="savePickedQs()">確認選擇</button>
     </div>
   </div>`;
+  return h;
+}
+
+// ─── Chat (引導式對話) ───
+function renderChat(fs, ff) {
+  const d = parseD(S.selDate);
+  const label = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+  const curQ = S.activeQs[S.chatQIdx];
+  const total = S.activeQs.length;
+  const isDone = S.chatQIdx >= total;
+
+  let h = `<div class="page-wrap">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goCal()">← 返回</button>
+      <span class="top-title">✦ 引導式反思</span>
+    </div>
+    <p class="sub-text" style="margin:0 0 4px">${label}　${isDone ? '完成' : `第 ${S.chatQIdx+1}/${total} 題`}</p>`;
+
+  // Chat messages
+  h += '<div class="chat-messages" id="chatMessages">';
+
+  S.chatHistory.forEach(m => {
+    if (m.type === 'question') {
+      h += `<div class="chat-question-card">
+        <span class="chat-q-num">問題 ${m.num}/${total}</span>
+        <div class="chat-q-text">${esc(m.text)}</div>
+      </div>`;
+    } else if (m.role === 'user') {
+      h += `<div class="chat-bubble user">${esc(m.text)}</div>`;
+    } else if (m.role === 'ai') {
+      h += `<div class="chat-bubble ai">`;
+      if (m.observation) h += `<div>${esc(m.observation)}</div>`;
+      if (m.followup) h += `<div style="margin-top:6px;font-weight:600;color:var(--gold)">❓ ${esc(m.followup)}</div>`;
+      if (m.framework) h += `<span class="chat-fw-tag">💡 ${esc(m.framework)}</span>`;
+      if (m.pattern) h += `<div class="chat-pattern-card" style="margin-top:6px">🔄 模式辨識：${esc(m.pattern)}</div>`;
+      if (m.text && !m.observation) h += `<div>${esc(m.text)}</div>`;
+      h += '</div>';
+    }
+  });
+
+  if (S.chatLoading) {
+    h += `<div class="chat-bubble ai" style="opacity:.6">
+      <div class="load-spin" style="width:18px;height:18px;border-width:2px;margin:0 auto"></div>
+      <div style="text-align:center;font-size:11px;margin-top:4px">思考中…</div>
+    </div>`;
+  }
+
+  h += '</div>';
+
+  // Input area
+  if (!isDone) {
+    if (curQ && S.chatHistory.length === 0 || (S.chatHistory.length > 0 && S.chatHistory[S.chatHistory.length-1].type !== 'question' || S.chatHistory[S.chatHistory.length-1].qId !== curQ?.id)) {
+      // Question card not yet shown — will be added on render via startChatQ
+    }
+    h += `<div class="chat-input-row">
+      <textarea id="chatInput" rows="1" placeholder="${S.chatPhase==='followup'?'回答追問，或點跳過進入下一題…':'寫下你的反思…'}"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"
+        oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+      <button class="chat-send-btn" onclick="sendChat()" ${S.chatLoading?'disabled':''}>➤</button>
+    </div>
+    <div style="display:flex;gap:8px;padding:2px 0">
+      ${S.chatPhase==='followup'?`<button class="chat-skip-btn" onclick="chatNextQ()">跳過追問 →</button>`:''}
+      <button class="chat-skip-btn" onclick="chatSkipQ()">跳過此題 →</button>
+    </div>`;
+  } else {
+    // Done - show summary
+    if (S.chatSummary) {
+      h += `<div style="margin-top:8px">
+        <button class="save-btn" onclick="saveChatResult()">💾 儲存反思結果</button>
+        <button class="add-btn" onclick="goGuidance('${S.selDate}')">📖 查看完整引導報告</button>
+      </div>`;
+    } else if (S.chatLoading) {
+      // generating summary
+    } else {
+      h += `<div style="text-align:center;padding:20px 0">
+        <p style="font-size:14px;color:var(--gold);font-weight:600">✦ 所有問題已完成</p>
+        <button class="save-btn" style="margin-top:10px" onclick="generateChatSummary()">產生深度分析報告</button>
+      </div>`;
+    }
+  }
+
+  h += '</div>';
   return h;
 }
 
@@ -1259,7 +1512,8 @@ window.runGuidance = async () => {
   if (!ref0?.answers) return;
   S.guideLoading=true; S.guideError=null; render();
   const selSfws = S.solveFws.filter(sf=>S.activeSolveFws.includes(sf.id));
-  const result = await aiGuidance(ref0.answers, S.activeQs, selSfws);
+  const recentCtx = getRecentContext(7);
+  const result = await aiGuidance(ref0.answers, S.activeQs, selSfws, recentCtx);
   if (result) {
     S.guideReport = result;
     await saveGuidance(S.selDate, result);
@@ -1268,6 +1522,121 @@ window.runGuidance = async () => {
   }
   S.guideLoading = false; render();
 };
+
+// ─── Chat (引導式對話) actions ───
+window.goChat = (dateKey) => {
+  S.selDate = dateKey;
+  S.view = "chat"; S.subView = null;
+  S.chatQIdx = 0; S.chatHistory = []; S.chatLoading = false;
+  S.chatPhase = "answer"; S.chatSummary = null;
+  // Show first question
+  if (S.activeQs.length > 0) {
+    const q = S.activeQs[0];
+    S.chatHistory.push({ type:"question", qId:q.id, text:q.text, num:1 });
+  }
+  render();
+  scrollChatBottom();
+};
+
+window.sendChat = async () => {
+  const inp = document.getElementById('chatInput');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text || S.chatLoading) return;
+
+  const curQ = S.activeQs[S.chatQIdx];
+  if (!curQ) return;
+
+  // Save user message
+  S.chatHistory.push({ role:"user", text, qId:curQ.id });
+  // Save answer to edAns
+  if (!S.edAns[curQ.id]) S.edAns[curQ.id] = text;
+  else S.edAns[curQ.id] += "\n" + text;
+
+  S.chatLoading = true;
+  render();
+  scrollChatBottom();
+
+  // AI follow-up
+  const recentCtx = getRecentContext(7);
+  const qHistory = S.chatHistory.filter(m => m.qId === curQ.id && m.role);
+  const result = await aiChatFollowup(curQ.text, text, qHistory, recentCtx);
+
+  S.chatLoading = false;
+
+  if (result) {
+    S.chatHistory.push({
+      role:"ai", qId:curQ.id,
+      observation: result.observation,
+      followup: result.followup,
+      framework: result.framework,
+      pattern: result.pattern === "null" || !result.pattern ? null : result.pattern,
+    });
+    S.chatPhase = "followup";
+  } else {
+    // AI failed, move on
+    chatNextQ();
+    return;
+  }
+
+  render();
+  scrollChatBottom();
+};
+
+window.chatNextQ = () => {
+  S.chatQIdx++;
+  S.chatPhase = "answer";
+  if (S.chatQIdx < S.activeQs.length) {
+    const q = S.activeQs[S.chatQIdx];
+    S.chatHistory.push({ type:"question", qId:q.id, text:q.text, num:S.chatQIdx+1 });
+  }
+  render();
+  scrollChatBottom();
+};
+
+window.chatSkipQ = () => {
+  chatNextQ();
+};
+
+window.generateChatSummary = async () => {
+  S.chatLoading = true; render();
+  const recentCtx = getRecentContext(7);
+  const result = await aiChatSummary(S.chatHistory, S.activeQs, recentCtx);
+  S.chatLoading = false;
+  if (result) {
+    S.chatSummary = result;
+    S.guideReport = result;
+    await saveGuidance(S.selDate, result);
+  }
+  render();
+  scrollChatBottom();
+};
+
+window.saveChatResult = async () => {
+  // Save all answers and AI report
+  const tags = [];
+  const data = {
+    answers: S.edAns,
+    qTags: S.edQTags,
+    tags,
+    chatHistory: S.chatHistory,
+    guidance: S.chatSummary,
+    updatedAt: Date.now(),
+    createdAt: S.refs[S.selDate]?.createdAt || Date.now(),
+    exported: false,
+  };
+  await saveRef(S.selDate, data);
+  S.refs[S.selDate] = data;
+  if (S.chatSummary) await saveGuidance(S.selDate, S.chatSummary);
+  showToast("反思已儲存 ✓");
+};
+
+function scrollChatBottom() {
+  setTimeout(() => {
+    const el = document.getElementById('chatMessages');
+    if (el) el.scrollIntoView({ block:'end', behavior:'smooth' });
+  }, 50);
+}
 window.toggleGuideQ = (qId) => {
   S.guideExpanded[qId] = !S.guideExpanded[qId]; render();
 };
